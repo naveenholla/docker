@@ -545,4 +545,7 @@ func (t *TtyConsole) AttachPipes(command *exec.Cmd, pipes *execdriver.Pipes) err
 func (t *TtyConsole) Close() error {
 	t.SlavePty.Close()
 	return t.MasterPty.Close()
+
+func (d *driver) RunIn(c *execdriver.Command, pipes *execdriver.Pipes, startCallback execdriver.StartCallback) (int, error) {
+	return -1, fmt.Errorf("Unsupported")
 }
