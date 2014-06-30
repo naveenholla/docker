@@ -281,3 +281,7 @@ func getTerminal(c *execdriver.Command, pipes *execdriver.Pipes) namespaces.Term
 	c.Terminal = term
 	return term
 }
+
+func (d *driver) RunIn(c *execdriver.Command, pipes *execdriver.Pipes, startCallback execdriver.StartCallback) (int, error) {
+	return -1, fmt.Errorf("Unsupported")
+}
