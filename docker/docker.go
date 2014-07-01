@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/docker/libcontainer/nsinit"
 	"github.com/dotcloud/docker/api"
 	"github.com/dotcloud/docker/api/client"
 	"github.com/dotcloud/docker/builtins"
@@ -23,9 +24,10 @@ import (
 )
 
 const (
-	defaultCaFile   = "ca.pem"
-	defaultKeyFile  = "key.pem"
-	defaultCertFile = "cert.pem"
+	defaultCaFile    = "ca.pem"
+	defaultKeyFile   = "key.pem"
+	defaultCertFile  = "cert.pem"
+	nsinitBinaryName = "nsinit"
 )
 
 var (
@@ -36,6 +38,12 @@ func main() {
 	if selfPath := utils.SelfPath(); strings.Contains(selfPath, ".dockerinit") {
 		// Running in init mode
 		sysinit.SysInit()
+		return
+	}
+
+	if selfPath := utils.SelfPath(); strings.Contains(selfPath, nsinitBinaryName) {
+		// Running in nsinit mode
+		nsinit.NsInit()
 		return
 	}
 
