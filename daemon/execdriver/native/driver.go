@@ -283,5 +283,23 @@ func getTerminal(c *execdriver.Command, pipes *execdriver.Pipes) namespaces.Term
 }
 
 func (d *driver) RunIn(c *execdriver.Command, pipes *execdriver.Pipes, startCallback execdriver.StartCallback) (int, error) {
-	return -1, fmt.Errorf("Unsupported")
+	active := d.activeContainers[c.ID]
+	if active == nil {
+		return -1, fmt.Errorf("No active container exists with ID %s", c.ID)
+	}
+	state, err := libcontainer.GetState(filepath.Join(d.root, c.ID))
+	if err != nil {
+		return -1, fmt.Errorf("State unavailable for container with ID %s. The container may have been cleaned up already. Error: %s", c.ID, err)
+	}
+
+	term := getTerminal(c, pipes)
+
+	args := append([]string{c.Entrypoint}, c.Arguments...)
+
+	return namespaces.RunIn(active.container, state, args, d.nsinitPath, term,
+		func() {
+			if startCallback != nil {
+				startCallback(c)
+			}
+		})
 }
