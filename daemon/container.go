@@ -218,24 +218,27 @@ func populateCommand(c *Container, env []string) error {
 		CpuShares:  c.Config.CpuShares,
 		Cpuset:     c.Config.Cpuset,
 	}
+	processConfig := execdriver.ProcessConfig{
+		Privileged: c.hostConfig.Privileged,
+		Entrypoint: c.Path,
+		Arguments:  c.Args,
+		Tty:        c.Config.Tty,
+		User:       c.Config.User,
+	}
+	processConfig.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	processConfig.Env = env
 	c.command = &execdriver.Command{
 		ID:                 c.ID,
-		Privileged:         c.hostConfig.Privileged,
 		Rootfs:             c.RootfsPath(),
 		InitPath:           "/.dockerinit",
-		Entrypoint:         c.Path,
-		Arguments:          c.Args,
 		WorkingDir:         c.Config.WorkingDir,
 		Network:            en,
-		Tty:                c.Config.Tty,
-		User:               c.Config.User,
 		Config:             context,
 		Resources:          resources,
 		AllowedDevices:     devices.DefaultAllowedDevices,
 		AutoCreatedDevices: devices.DefaultAutoCreatedDevices,
+		ProcessConfig:      processConfig,
 	}
-	c.command.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-	c.command.Env = env
 	return nil
 }
 
@@ -509,8 +512,8 @@ func (container *Container) cleanup() {
 	if err := container.stderr.Clean(); err != nil {
 		utils.Errorf("%s: Error close stderr: %s", container.ID, err)
 	}
-	if container.command != nil && container.command.Terminal != nil {
-		if err := container.command.Terminal.Close(); err != nil {
+	if container.command != nil && container.command.ProcessConfig.Terminal != nil {
+		if err := container.command.ProcessConfig.Terminal.Close(); err != nil {
 			utils.Errorf("%s: Error closing terminal: %s", container.ID, err)
 		}
 	}
@@ -621,7 +624,7 @@ func (container *Container) Restart(seconds int) error {
 }
 
 func (container *Container) Resize(h, w int) error {
-	return container.command.Terminal.Resize(h, w)
+	return container.command.ProcessConfig.Terminal.Resize(h, w)
 }
 
 func (container *Container) ExportRw() (archive.Archive, error) {
@@ -805,7 +808,7 @@ func (container *Container) Exposes(p nat.Port) bool {
 }
 
 func (container *Container) GetPtyMaster() (*os.File, error) {
-	ttyConsole, ok := container.command.Terminal.(execdriver.TtyTerminal)
+	ttyConsole, ok := container.command.ProcessConfig.Terminal.(execdriver.TtyTerminal)
 	if !ok {
 		return nil, ErrNoTTY
 	}
@@ -1072,19 +1075,19 @@ func (container *Container) startLoggingToDisk() error {
 }
 
 func (container *Container) waitForStart() error {
-	callback := func(command *execdriver.Command) {
-		if command.Tty {
+	callback := func(processConfig *execdriver.ProcessConfig) {
+		if processConfig.Tty {
 			// The callback is called after the process Start()
 			// so we are in the parent process. In TTY mode, stdin/out/err is the PtySlace
 			// which we close here.
-			if c, ok := command.Stdout.(io.Closer); ok {
+			if c, ok := processConfig.Stdout.(io.Closer); ok {
 				c.Close()
 			}
 		}
 		if err := container.ToDisk(); err != nil {
 			utils.Debugf("%s", err)
 		}
-		container.State.SetRunning(command.Pid())
+		container.State.SetRunning(processConfig.Pid())
 	}
 
 	// We use a callback here instead of a goroutine and an chan for

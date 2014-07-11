@@ -23,7 +23,7 @@ var (
 var dockerInitFcts map[string]InitFunc
 
 type (
-	StartCallback func(*Command)
+	StartCallback func(*ProcessConfig)
 	InitFunc      func(i *InitArgs) error
 )
 
@@ -81,8 +81,8 @@ type TtyTerminal interface {
 }
 
 type Driver interface {
-	Run(c *Command, pipes *Pipes, startCallback StartCallback) (int, error)   // Run executes the process and blocks until the process exits and returns the exit code
-	RunIn(c *Command, pipes *Pipes, startCallback StartCallback) (int, error) // RunIn executes the process in an existing container, blocks until the process exits and returns the exit code
+	Run(c *Command, pipes *Pipes, startCallback StartCallback) (int, error)                                 // Run executes the process and blocks until the process exits and returns the exit code
+	RunIn(c *Command, processConfig *ProcessConfig, pipes *Pipes, startCallback StartCallback) (int, error) // RunIn executes the process in an existing container, blocks until the process exits and returns the exit code
 	Kill(c *Command, sig int) error
 	Pause(c *Command) error
 	Unpause(c *Command) error
@@ -121,20 +121,26 @@ type Mount struct {
 	Private     bool   `json:"private"`
 }
 
-// Process wrapps an os/exec.Cmd to add more metadata
-type Command struct {
+// Describes a process that will be run inside a container.
+type ProcessConfig struct {
 	exec.Cmd `json:"-"`
 
+	Privileged   bool     `json:"privileged"`
+	User         string   `json:"user"`
+	Tty          bool     `json:"tty"`
+	Entrypoint   string   `json:"entrypoint"`
+	Arguments    []string `json:"arguments"`
+	Terminal     Terminal `json:"-"`             // standard or tty terminal
+	ContainerPid int      `json:"container_pid"` // the pid for the process inside a container
+}
+
+// Process wrapps an os/exec.Cmd to add more metadata
+type Command struct {
 	ID                 string              `json:"id"`
-	Privileged         bool                `json:"privileged"`
-	User               string              `json:"user"`
 	Rootfs             string              `json:"rootfs"`   // root fs of the container
 	InitPath           string              `json:"initpath"` // dockerinit
-	Entrypoint         string              `json:"entrypoint"`
-	Arguments          []string            `json:"arguments"`
 	WorkingDir         string              `json:"working_dir"`
 	ConfigPath         string              `json:"config_path"` // this should be able to be removed when the lxc template is moved into the driver
-	Tty                bool                `json:"tty"`
 	Network            *Network            `json:"network"`
 	Config             map[string][]string `json:"config"` //  generic values that specific drivers can consume
 	Resources          *Resources          `json:"resources"`
@@ -142,13 +148,12 @@ type Command struct {
 	AllowedDevices     []*devices.Device   `json:"allowed_devices"`
 	AutoCreatedDevices []*devices.Device   `json:"autocreated_devices"`
 
-	Terminal     Terminal `json:"-"`             // standard or tty terminal
-	Console      string   `json:"-"`             // dev/console path
-	ContainerPid int      `json:"container_pid"` // the pid for the process inside a container
+	Console       string        `json:"-"`              // dev/console path
+	ProcessConfig ProcessConfig `json:"process_config"` // Describes the init process of the container.
 }
 
 // Return the pid of the process
 // If the process is nil -1 will be returned
-func (c *Command) Pid() int {
-	return c.ContainerPid
+func (processConfig *ProcessConfig) Pid() int {
+	return processConfig.ContainerPid
 }

@@ -205,7 +205,7 @@ func (daemon *Daemon) register(container *Container, updateSuffixarray bool, con
 				ID: container.ID,
 			}
 			var err error
-			cmd.Process, err = os.FindProcess(existingPid)
+			cmd.ProcessConfig.Process, err = os.FindProcess(existingPid)
 			if err != nil {
 				utils.Debugf("cannot find existing process for %d", existingPid)
 			}

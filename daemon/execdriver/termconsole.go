@@ -13,7 +13,7 @@ func SetTerminal(command *Command, pipes *Pipes) error {
 		term Terminal
 		err  error
 	)
-	if command.Tty {
+	if command.ProcessConfig.Tty {
 		term, err = NewTtyConsole(command, pipes)
 	} else {
 		term, err = NewStdConsole(command, pipes)
@@ -21,7 +21,7 @@ func SetTerminal(command *Command, pipes *Pipes) error {
 	if err != nil {
 		return err
 	}
-	command.Terminal = term
+	command.ProcessConfig.Terminal = term
 	return nil
 }
 
@@ -39,7 +39,7 @@ func NewTtyConsole(command *Command, pipes *Pipes) (*TtyConsole, error) {
 		MasterPty: ptyMaster,
 		SlavePty:  ptySlave,
 	}
-	if err := tty.AttachPipes(&command.Cmd, pipes); err != nil {
+	if err := tty.AttachPipes(&command.ProcessConfig.Cmd, pipes); err != nil {
 		tty.Close()
 		return nil, err
 	}
@@ -91,7 +91,7 @@ type StdConsole struct {
 func NewStdConsole(command *Command, pipes *Pipes) (*StdConsole, error) {
 	std := &StdConsole{}
 
-	if err := std.AttachPipes(&command.Cmd, pipes); err != nil {
+	if err := std.AttachPipes(&command.ProcessConfig.Cmd, pipes); err != nil {
 		return nil, err
 	}
 	return std, nil
