@@ -107,23 +107,23 @@ func (d *driver) Run(c *execdriver.Command, pipes *execdriver.Pipes, startCallba
 
 	var term execdriver.Terminal
 
-	if c.Tty {
-		term, err = NewTtyConsole(c, pipes)
+	if c.ProcessConfig.Tty {
+		term, err = NewTtyConsole(&c.ProcessConfig, pipes)
 	} else {
-		term, err = execdriver.NewStdConsole(c, pipes)
+		term, err = execdriver.NewStdConsole(&c.ProcessConfig, pipes)
 	}
-	c.Terminal = term
+	c.ProcessConfig.Terminal = term
 
 	d.Lock()
 	d.activeContainers[c.ID] = &activeContainer{
 		container: container,
-		cmd:       &c.Cmd,
+		cmd:       &c.ProcessConfig.Cmd,
 	}
 	d.Unlock()
 
 	var (
 		dataPath = filepath.Join(d.root, c.ID)
-		args     = append([]string{c.Entrypoint}, c.Arguments...)
+		args     = append([]string{c.ProcessConfig.Entrypoint}, c.ProcessConfig.Arguments...)
 	)
 
 	if err := d.createContainerRoot(c.ID); err != nil {
@@ -135,12 +135,12 @@ func (d *driver) Run(c *execdriver.Command, pipes *execdriver.Pipes, startCallba
 		return -1, err
 	}
 
-	return namespaces.Exec(container, c.Stdin, c.Stdout, c.Stderr, c.Console, c.Rootfs, dataPath, args, func(container *libcontainer.Config, console, rootfs, dataPath, init string, child *os.File, args []string) *exec.Cmd {
+	return namespaces.Exec(container, c.ProcessConfig.Stdin, c.ProcessConfig.Stdout, c.ProcessConfig.Stderr, c.ProcessConfig.Console, c.Rootfs, dataPath, args, func(container *libcontainer.Config, console, rootfs, dataPath, init string, child *os.File, args []string) *exec.Cmd {
 		// we need to join the rootfs because namespaces will setup the rootfs and chroot
 		initPath := filepath.Join(c.Rootfs, c.InitPath)
 
-		c.Path = d.initPath
-		c.Args = append([]string{
+		c.ProcessConfig.Path = d.initPath
+		c.ProcessConfig.Args = append([]string{
 			initPath,
 			"-driver", DriverName,
 			"-console", console,
@@ -150,24 +150,24 @@ func (d *driver) Run(c *execdriver.Command, pipes *execdriver.Pipes, startCallba
 		}, args...)
 
 		// set this to nil so that when we set the clone flags anything else is reset
-		c.SysProcAttr = nil
-		system.SetCloneFlags(&c.Cmd, uintptr(namespaces.GetNamespaceFlags(container.Namespaces)))
-		c.ExtraFiles = []*os.File{child}
+		c.ProcessConfig.SysProcAttr = nil
+		system.SetCloneFlags(&c.ProcessConfig.Cmd, uintptr(namespaces.GetNamespaceFlags(container.Namespaces)))
+		c.ProcessConfig.ExtraFiles = []*os.File{child}
 
-		c.Env = container.Env
-		c.Dir = c.Rootfs
+		c.ProcessConfig.Env = container.Env
+		c.ProcessConfig.Dir = c.Rootfs
 
-		return &c.Cmd
+		return &c.ProcessConfig.Cmd
 	}, func() {
 		if startCallback != nil {
-			c.ContainerPid = c.Process.Pid
-			startCallback(c)
+			c.ProcessConfig.ContainerPid = c.ProcessConfig.Process.Pid
+			startCallback(&c.ProcessConfig)
 		}
 	})
 }
 
 func (d *driver) Kill(p *execdriver.Command, sig int) error {
-	return syscall.Kill(p.Process.Pid, syscall.Signal(sig))
+	return syscall.Kill(p.ProcessConfig.Process.Pid, syscall.Signal(sig))
 }
 
 func (d *driver) Pause(c *execdriver.Command) error {
@@ -215,14 +215,14 @@ func (d *driver) Terminate(p *execdriver.Command) error {
 		state = &libcontainer.State{InitStartTime: string(data)}
 	}
 
-	currentStartTime, err := system.GetProcessStartTime(p.Process.Pid)
+	currentStartTime, err := system.GetProcessStartTime(p.ProcessConfig.Process.Pid)
 	if err != nil {
 		return err
 	}
 
 	if state.InitStartTime == currentStartTime {
-		err = syscall.Kill(p.Process.Pid, 9)
-		syscall.Wait4(p.Process.Pid, nil, 0, nil)
+		err = syscall.Kill(p.ProcessConfig.Process.Pid, 9)
+		syscall.Wait4(p.ProcessConfig.Process.Pid, nil, 0, nil)
 	}
 	d.removeContainerRoot(p.ID)
 
@@ -291,7 +291,7 @@ type TtyConsole struct {
 	MasterPty *os.File
 }
 
-func NewTtyConsole(command *execdriver.Command, pipes *execdriver.Pipes) (*TtyConsole, error) {
+func NewTtyConsole(processConfig *execdriver.ProcessConfig, pipes *execdriver.Pipes) (*TtyConsole, error) {
 	ptyMaster, console, err := system.CreateMasterAndConsole()
 	if err != nil {
 		return nil, err
@@ -301,12 +301,12 @@ func NewTtyConsole(command *execdriver.Command, pipes *execdriver.Pipes) (*TtyCo
 		MasterPty: ptyMaster,
 	}
 
-	if err := tty.AttachPipes(&command.Cmd, pipes); err != nil {
+	if err := tty.AttachPipes(&processConfig.Cmd, pipes); err != nil {
 		tty.Close()
 		return nil, err
 	}
 
-	command.Console = console
+	processConfig.Console = console
 
 	return tty, nil
 }
@@ -345,7 +345,7 @@ func (t *TtyConsole) Close() error {
 	return t.MasterPty.Close()
 }
 
-func (d *driver) RunIn(c *execdriver.Command, pipes *execdriver.Pipes, startCallback execdriver.StartCallback) (int, error) {
+func (d *driver) RunIn(c *execdriver.Command, processConfig *execdriver.ProcessConfig, pipes *execdriver.Pipes, startCallback execdriver.StartCallback) (int, error) {
 	active := d.activeContainers[c.ID]
 	if active == nil {
 		return -1, fmt.Errorf("No active container exists with ID %s", c.ID)
@@ -355,14 +355,22 @@ func (d *driver) RunIn(c *execdriver.Command, pipes *execdriver.Pipes, startCall
 		return -1, fmt.Errorf("State unavailable for container with ID %s. The container may have been cleaned up already. Error: %s", c.ID, err)
 	}
 
-	term := getTerminal(c, pipes)
+	var term execdriver.Terminal
 
-	args := append([]string{c.Entrypoint}, c.Arguments...)
+	if processConfig.Tty {
+		term, err = NewTtyConsole(processConfig, pipes)
+	} else {
+		term, err = execdriver.NewStdConsole(processConfig, pipes)
+	}
 
-	return namespaces.RunIn(active.container, state, args, d.nsinitPath, term,
-		func() {
+	processConfig.Terminal = term
+
+	args := append([]string{processConfig.Entrypoint}, processConfig.Arguments...)
+
+	return namespaces.RunIn(active.container, state, args, d.nsinitPath, processConfig.Stdin, processConfig.Stdout, processConfig.Stderr, processConfig.Console, 
+		func(cmd *exec.Cmd) {
 			if startCallback != nil {
-				startCallback(c)
+				startCallback(processConfig)
 			}
 		})
 }
