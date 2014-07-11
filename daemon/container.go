@@ -41,6 +41,14 @@ var (
 	ErrContainerStartTimeout = errors.New("The container failed to start due to timed out.")
 )
 
+type CommandConfig struct {
+	command   *execdriver.Command
+	stdout    *broadcastwriter.BroadcastWriter
+	stderr    *broadcastwriter.BroadcastWriter
+	stdin     io.ReadCloser
+	stdinPipe io.WriteCloser
+}
+
 type Container struct {
 	sync.Mutex
 	root   string // Path to the "home" of the container, including metadata.
@@ -66,11 +74,7 @@ type Container struct {
 	Driver         string
 	ExecDriver     string
 
-	command   *execdriver.Command
-	stdout    *broadcastwriter.BroadcastWriter
-	stderr    *broadcastwriter.BroadcastWriter
-	stdin     io.ReadCloser
-	stdinPipe io.WriteCloser
+	commandConfig CommandConfig
 
 	daemon                   *Daemon
 	MountLabel, ProcessLabel string
@@ -1205,4 +1209,74 @@ func (container *Container) getNetworkedContainer() (*Container, error) {
 	default:
 		return nil, fmt.Errorf("network mode not set to container")
 	}
+}
+
+func (container *Container) RunIn(processConfig *execdriver.ProcessConfig) error {
+	container.Lock()
+	defer container.Unlock()
+
+	if !container.State.IsRunning() {
+		return fmt.Errorf("Container %s is not not running", container.ID)
+	}
+
+	waitStart := make(chan struct{})
+	
+	callback := func(processConfig *execdriver.ProcessConfig) {
+		if processConfig.Tty {
+			// The callback is called after the process Start()
+			// so we are in the parent process. In TTY mode, stdin/out/err is the PtySlace
+			// which we close here.
+			if c, ok := processConfig.Stdout.(io.Closer); ok {
+				c.Close()
+			}
+		}
+		close(waitStart)
+	}
+
+	// We use a callback here instead of a goroutine and an chan for
+	// syncronization purposes
+	cErr := utils.Go(func() error { return container.monitor(callback) })
+
+	// Start should not return until the process is actually running
+	select {
+	case <-waitStart:
+	case err := <-cErr:
+		return err
+	}
+
+	return nil
+}
+
+func (container *Container) monitorRunIn(callback execdriver.StartCallback) error {
+	var (
+		err      error
+		exitCode int
+	)
+
+	pipes := execdriver.NewPipes(container.stdin, container.stdout, container.stderr, container.Config.OpenStdin)
+	exitCode, err = container.daemon.Run(container, pipes, callback)
+	if err != nil {
+		utils.Errorf("Error running container: %s", err)
+	}
+	container.State.SetStopped(exitCode)
+
+	// Cleanup
+	container.cleanup()
+
+	// Re-create a brand new stdin pipe once the container exited
+	if container.Config.OpenStdin {
+		container.stdin, container.stdinPipe = io.Pipe()
+	}
+	if container.daemon != nil && container.daemon.srv != nil {
+		container.daemon.srv.LogEvent("die", container.ID, container.daemon.repositories.ImageName(container.Image))
+	}
+	if container.daemon != nil && container.daemon.srv != nil && container.daemon.srv.IsRunning() {
+		// FIXME: here is race condition between two RUN instructions in Dockerfile
+		// because they share same runconfig and change image. Must be fixed
+		// in server/buildfile.go
+		if err := container.ToDisk(); err != nil {
+			utils.Errorf("Error dumping container %s state to disk: %s\n", container.ID, err)
+		}
+	}
+	return err
 }
