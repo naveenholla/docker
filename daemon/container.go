@@ -41,8 +41,13 @@ var (
 	ErrContainerStartTimeout = errors.New("The container failed to start due to timed out.")
 )
 
-type CommandConfig struct {
-	command   *execdriver.Command
+type RunInConfig struct {
+	ProcessConfig *execdriver.ProcessConfig
+	StdConfig     *StdConfig
+	OpenStdin     bool
+}
+
+type StdConfig struct {
 	stdout    *broadcastwriter.BroadcastWriter
 	stderr    *broadcastwriter.BroadcastWriter
 	stdin     io.ReadCloser
@@ -74,7 +79,8 @@ type Container struct {
 	Driver         string
 	ExecDriver     string
 
-	commandConfig CommandConfig
+	command   *execdriver.Command
+	StdConfig *StdConfig
 
 	daemon                   *Daemon
 	MountLabel, ProcessLabel string
@@ -349,30 +355,30 @@ func (container *Container) Output() (output []byte, err error) {
 // a kind of "broadcaster".
 
 func (container *Container) StdinPipe() (io.WriteCloser, error) {
-	return container.stdinPipe, nil
+	return container.StdConfig.stdinPipe, nil
 }
 
 func (container *Container) StdoutPipe() (io.ReadCloser, error) {
 	reader, writer := io.Pipe()
-	container.stdout.AddWriter(writer, "")
+	container.StdConfig.stdout.AddWriter(writer, "")
 	return utils.NewBufReader(reader), nil
 }
 
 func (container *Container) StderrPipe() (io.ReadCloser, error) {
 	reader, writer := io.Pipe()
-	container.stderr.AddWriter(writer, "")
+	container.StdConfig.stderr.AddWriter(writer, "")
 	return utils.NewBufReader(reader), nil
 }
 
 func (container *Container) StdoutLogPipe() io.ReadCloser {
 	reader, writer := io.Pipe()
-	container.stdout.AddWriter(writer, "stdout")
+	container.StdConfig.stdout.AddWriter(writer, "stdout")
 	return utils.NewBufReader(reader)
 }
 
 func (container *Container) StderrLogPipe() io.ReadCloser {
 	reader, writer := io.Pipe()
-	container.stderr.AddWriter(writer, "stderr")
+	container.StdConfig.stderr.AddWriter(writer, "stderr")
 	return utils.NewBufReader(reader)
 }
 
@@ -500,7 +506,7 @@ func (container *Container) monitor(callback execdriver.StartCallback) error {
 		exitCode int
 	)
 
-	pipes := execdriver.NewPipes(container.stdin, container.stdout, container.stderr, container.Config.OpenStdin)
+	pipes := execdriver.NewPipes(container.StdConfig.stdin, container.StdConfig.stdout, container.StdConfig.stderr, container.Config.OpenStdin)
 	exitCode, err = container.daemon.Run(container, pipes, callback)
 	if err != nil {
 		utils.Errorf("Error running container: %s", err)
@@ -512,7 +518,7 @@ func (container *Container) monitor(callback execdriver.StartCallback) error {
 
 	// Re-create a brand new stdin pipe once the container exited
 	if container.Config.OpenStdin {
-		container.stdin, container.stdinPipe = io.Pipe()
+		container.StdConfig.stdin, container.StdConfig.stdinPipe = io.Pipe()
 	}
 	if container.daemon != nil && container.daemon.srv != nil {
 		container.daemon.srv.LogEvent("die", container.ID, container.daemon.repositories.ImageName(container.Image))
@@ -538,14 +544,14 @@ func (container *Container) cleanup() {
 		}
 	}
 	if container.Config.OpenStdin {
-		if err := container.stdin.Close(); err != nil {
+		if err := container.StdConfig.stdin.Close(); err != nil {
 			utils.Errorf("%s: Error close stdin: %s", container.ID, err)
 		}
 	}
-	if err := container.stdout.Clean(); err != nil {
+	if err := container.StdConfig.stdout.Clean(); err != nil {
 		utils.Errorf("%s: Error close stdout: %s", container.ID, err)
 	}
-	if err := container.stderr.Clean(); err != nil {
+	if err := container.StdConfig.stderr.Clean(); err != nil {
 		utils.Errorf("%s: Error close stderr: %s", container.ID, err)
 	}
 	if container.command != nil && container.command.ProcessConfig.Terminal != nil {
@@ -1099,11 +1105,11 @@ func (container *Container) startLoggingToDisk() error {
 		return err
 	}
 
-	if err := container.daemon.LogToDisk(container.stdout, pth, "stdout"); err != nil {
+	if err := container.daemon.LogToDisk(container.StdConfig.stdout, pth, "stdout"); err != nil {
 		return err
 	}
 
-	if err := container.daemon.LogToDisk(container.stderr, pth, "stderr"); err != nil {
+	if err := container.daemon.LogToDisk(container.StdConfig.stderr, pth, "stderr"); err != nil {
 		return err
 	}
 
@@ -1211,7 +1217,7 @@ func (container *Container) getNetworkedContainer() (*Container, error) {
 	}
 }
 
-func (container *Container) RunIn(processConfig *execdriver.ProcessConfig) error {
+func (container *Container) RunIn(runInConfig *RunInConfig) error {
 	container.Lock()
 	defer container.Unlock()
 
@@ -1220,7 +1226,7 @@ func (container *Container) RunIn(processConfig *execdriver.ProcessConfig) error
 	}
 
 	waitStart := make(chan struct{})
-	
+
 	callback := func(processConfig *execdriver.ProcessConfig) {
 		if processConfig.Tty {
 			// The callback is called after the process Start()
@@ -1235,7 +1241,7 @@ func (container *Container) RunIn(processConfig *execdriver.ProcessConfig) error
 
 	// We use a callback here instead of a goroutine and an chan for
 	// syncronization purposes
-	cErr := utils.Go(func() error { return container.monitor(callback) })
+	cErr := utils.Go(func() error { return container.monitorRunIn(runInConfig, callback) })
 
 	// Start should not return until the process is actually running
 	select {
@@ -1247,36 +1253,22 @@ func (container *Container) RunIn(processConfig *execdriver.ProcessConfig) error
 	return nil
 }
 
-func (container *Container) monitorRunIn(callback execdriver.StartCallback) error {
+func (container *Container) monitorRunIn(runInConfig *RunInConfig, callback execdriver.StartCallback) error {
 	var (
 		err      error
 		exitCode int
 	)
 
-	pipes := execdriver.NewPipes(container.stdin, container.stdout, container.stderr, container.Config.OpenStdin)
-	exitCode, err = container.daemon.Run(container, pipes, callback)
+	pipes := execdriver.NewPipes(runInConfig.StdConfig.stdin, runInConfig.StdConfig.stdout, runInConfig.StdConfig.stderr, runInConfig.OpenStdin)
+	exitCode, err = container.daemon.RunIn(container, runInConfig, pipes, callback)
 	if err != nil {
-		utils.Errorf("Error running container: %s", err)
+		utils.Errorf("Error running command in existing container %s: %s", container.ID, err)
 	}
-	container.State.SetStopped(exitCode)
-
-	// Cleanup
-	container.cleanup()
-
+	utils.Debugf("Task exited with code: %v", exitCode)
 	// Re-create a brand new stdin pipe once the container exited
-	if container.Config.OpenStdin {
-		container.stdin, container.stdinPipe = io.Pipe()
+	if runInConfig.OpenStdin {
+		runInConfig.StdConfig.stdin, runInConfig.StdConfig.stdinPipe = io.Pipe()
 	}
-	if container.daemon != nil && container.daemon.srv != nil {
-		container.daemon.srv.LogEvent("die", container.ID, container.daemon.repositories.ImageName(container.Image))
-	}
-	if container.daemon != nil && container.daemon.srv != nil && container.daemon.srv.IsRunning() {
-		// FIXME: here is race condition between two RUN instructions in Dockerfile
-		// because they share same runconfig and change image. Must be fixed
-		// in server/buildfile.go
-		if err := container.ToDisk(); err != nil {
-			utils.Errorf("Error dumping container %s state to disk: %s\n", container.ID, err)
-		}
-	}
+
 	return err
 }

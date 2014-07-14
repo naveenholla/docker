@@ -170,13 +170,13 @@ func (daemon *Daemon) register(container *Container, updateSuffixarray bool, con
 	container.daemon = daemon
 
 	// Attach to stdout and stderr
-	container.stderr = broadcastwriter.New()
-	container.stdout = broadcastwriter.New()
+	container.StdConfig.stderr = broadcastwriter.New()
+	container.StdConfig.stdout = broadcastwriter.New()
 	// Attach to stdin
 	if container.Config.OpenStdin {
-		container.stdin, container.stdinPipe = io.Pipe()
+		container.StdConfig.stdin, container.StdConfig.stdinPipe = io.Pipe()
 	} else {
-		container.stdinPipe = utils.NopWriteCloser(ioutil.Discard) // Silently drop stdin
+		container.StdConfig.stdinPipe = utils.NopWriteCloser(ioutil.Discard) // Silently drop stdin
 	}
 	// done
 	daemon.containers.Add(container.ID, container)
@@ -543,19 +543,19 @@ func (daemon *Daemon) generateHostname(id string, config *runconfig.Config) {
 	}
 }
 
-func (daemon *Daemon) getEntrypointAndArgs(config *runconfig.Config) (string, []string) {
+func (daemon *Daemon) getEntrypointAndArgs(entrypoint, cmd []string) (string, []string) {
 	var (
-		entrypoint string
-		args       []string
+		newEntrypoint string
+		args          []string
 	)
-	if len(config.Entrypoint) != 0 {
-		entrypoint = config.Entrypoint[0]
-		args = append(config.Entrypoint[1:], config.Cmd...)
+	if len(entrypoint) != 0 {
+		newEntrypoint = entrypoint[0]
+		args = append(entrypoint[1:], cmd...)
 	} else {
-		entrypoint = config.Cmd[0]
-		args = config.Cmd[1:]
+		newEntrypoint = cmd[0]
+		args = cmd[1:]
 	}
-	return entrypoint, args
+	return newEntrypoint, args
 }
 
 func (daemon *Daemon) newContainer(name string, config *runconfig.Config, img *image.Image) (*Container, error) {
@@ -569,7 +569,7 @@ func (daemon *Daemon) newContainer(name string, config *runconfig.Config, img *i
 	}
 
 	daemon.generateHostname(id, config)
-	entrypoint, args := daemon.getEntrypointAndArgs(config)
+	entrypoint, args := daemon.getEntrypointAndArgs(config.Entrypoint, config.Cmd)
 
 	container := &Container{
 		// FIXME: we should generate the ID here instead of receiving it as an argument
@@ -1020,6 +1020,10 @@ func (daemon *Daemon) Run(c *Container, pipes *execdriver.Pipes, startCallback e
 	return daemon.execDriver.Run(c.command, pipes, startCallback)
 }
 
+func (daemon *Daemon) RunIn(c *Container, runInConfig *RunInConfig, pipes *execdriver.Pipes, startCallback execdriver.StartCallback) (int, error) {
+	return daemon.execDriver.RunIn(c.command, runInConfig.ProcessConfig, pipes, startCallback)
+}
+
 func (daemon *Daemon) Pause(c *Container) error {
 	if err := daemon.execDriver.Pause(c.command); err != nil {
 		return err
@@ -1112,5 +1116,48 @@ func (daemon *Daemon) checkLocaldns() error {
 		log.Printf("Local (127.0.0.1) DNS resolver found in resolv.conf and containers can't use it. Using default external servers : %v\n", DefaultDns)
 		daemon.config.Dns = DefaultDns
 	}
+	return nil
+}
+
+func (daemon *Daemon) RunInContainer(config *runconfig.RunInConfig, name string) error {
+	container := daemon.Get(name)
+	if container == nil {
+		return fmt.Errorf("No such container: %s", name)
+	}
+
+	if container.State.IsRunning() {
+		return fmt.Errorf("Container already started")
+	}
+
+	entrypoint, args := daemon.getEntrypointAndArgs(config.Entrypoint, config.Cmd)
+	// TODO(vishh): Fill up run in config.
+
+	processConfig := &execdriver.ProcessConfig{
+		Privileged: config.Privileged,
+		User:       config.User,
+		Tty:        config.Tty,
+		Entrypoint: entrypoint,
+		Arguments:  args,
+	}
+	processConfig.Env = config.Env
+	runInConfig := &RunInConfig{
+		OpenStdin:     config.OpenStdin,
+		StdConfig:     &StdConfig{},
+		ProcessConfig: processConfig,
+	}
+
+	runInConfig.StdConfig.stderr = broadcastwriter.New()
+	runInConfig.StdConfig.stdout = broadcastwriter.New()
+	// Attach to stdin
+	if runInConfig.OpenStdin {
+		runInConfig.StdConfig.stdin, runInConfig.StdConfig.stdinPipe = io.Pipe()
+	} else {
+		runInConfig.StdConfig.stdinPipe = utils.NopWriteCloser(ioutil.Discard) // Silently drop stdin
+	}
+
+	if err := container.RunIn(runInConfig); err != nil {
+		return fmt.Errorf("Cannot run in container %s: %s", name, err)
+	}
+
 	return nil
 }

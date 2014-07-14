@@ -2149,6 +2149,49 @@ func (srv *Server) ContainerStart(job *engine.Job) engine.Status {
 	return engine.StatusOK
 }
 
+func (srv *Server) ContainerRunIn(job *engine.Job) engine.Status {
+	if len(job.Args) < 2 {
+		return job.Errorf("Usage: %s container_id command", job.Name)
+	}
+	var (
+		cStdin           io.ReadCloser
+		cStdout, cStderr io.Writer
+		cStdinCloser     io.Closer
+		name             = job.Args[0]
+		daemon           = srv.daemon
+	)
+
+	runInConfig := runconfig.RunInConfigFromJob(job)
+
+	if runInConfig.Stdin {
+		r, w := io.Pipe()
+		go func() {
+			defer w.Close()
+			defer utils.Debugf("Closing buffered stdin pipe")
+			io.Copy(w, job.Stdin)
+		}()
+		cStdin = r
+		cStdinCloser = job.Stdin
+	}
+	if runInConfig.Stdout {
+		cStdout = job.Stdout
+	}
+	if runInConfig.Stderr {
+		cStderr = job.Stderr
+	}
+
+	// TODO(vishh): Handle attaching.
+	utils.Debugf("stdin: %v, stdincloser: %v, stdout: %v, stderr: %v", cStdin, cStdinCloser, cStdout, cStderr)
+	//<-srv.daemon.Attach(container, cStdin, cStdinCloser, cStdout, cStderr)
+
+	if err := daemon.RunInContainer(runInConfig, name); err != nil {
+		return job.Error(err)
+	}
+	//srv.LogEvent("runin", name)
+
+	return engine.StatusOK
+}
+
 func (srv *Server) ContainerStop(job *engine.Job) engine.Status {
 	if len(job.Args) != 1 {
 		return job.Errorf("Usage: %s CONTAINER\n", job.Name)
