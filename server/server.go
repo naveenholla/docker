@@ -2163,7 +2163,7 @@ func (srv *Server) ContainerRunIn(job *engine.Job) engine.Status {
 
 	runInConfig := runconfig.RunInConfigFromJob(job)
 
-	if runInConfig.Stdin {
+	if runInConfig.AttachStdin {
 		r, w := io.Pipe()
 		go func() {
 			defer w.Close()
@@ -2173,10 +2173,10 @@ func (srv *Server) ContainerRunIn(job *engine.Job) engine.Status {
 		cStdin = r
 		cStdinCloser = job.Stdin
 	}
-	if runInConfig.Stdout {
+	if runInConfig.AttachStdout {
 		cStdout = job.Stdout
 	}
-	if runInConfig.Stderr {
+	if runInConfig.AttachStderr {
 		cStderr = job.Stderr
 	}
 

@@ -1973,6 +1973,82 @@ func (cli *DockerCli) pullImage(image string) error {
 	}
 	return nil
 }
+func (cli *DockerCli) CmdRunIn(args ...string) error {
+	runInConfig, cmd, err := runconfig.ParseRunIn(cli.Subcmd("runin", "[OPTIONS] CONTAINER COMMAND [ARG...]", "Run a command in an existing container"), args, nil)
+	if err != nil {
+		return err
+	}
+	if runInConfig.Container == "" {
+		cmd.Usage()
+		return nil
+	}
+
+	urlValues := url.Values{}
+	// We need to instanciate the chan because the select needs it. It can
+	// be closed but can't be uninitialized.
+	hijacked := make(chan io.Closer)
+	// Block the return until the chan gets closed
+	defer func() {
+		utils.Debugf("End of CmdRunIn(), Waiting for hijack to finish.")
+		if _, ok := <-hijacked; ok {
+			utils.Errorf("Hijack did not finish (chan still open)")
+		}
+	}()
+
+	var errCh chan error
+
+	if runInConfig.AttachStdin || runInConfig.AttachStdout || runInConfig.AttachStderr {
+		var (
+			out, stderr io.Writer
+			in          io.ReadCloser
+		)
+		urlValues.Set("stream", "1")
+
+		if runInConfig.AttachStdin {
+			urlValues.Set("stdin", "1")
+			in = cli.in
+		}
+		if runInConfig.AttachStdout {
+			urlValues.Set("stdout", "1")
+			out = cli.out
+		}
+		if runInConfig.AttachStderr {
+			urlValues.Set("stderr", "1")
+			if runInConfig.Tty {
+				stderr = cli.out
+			} else {
+				stderr = cli.err
+			}
+		}
+		errCh = utils.Go(func() error {
+			return cli.hijack("POST", "/containers/"+runInConfig.Container+"/runin?"+urlValues.Encode(), runInConfig.Tty, in, out, stderr, hijacked)
+		})
+	} else {
+		_, _, err := cli.call("POST", "/containers/"+runInConfig.Container+"/runin", runInConfig, false)
+		if err != nil {
+			return err
+		}
+		close(hijacked)
+	}
+
+
+	// Acknowledge the hijack before starting
+	select {
+	case closer := <-hijacked:
+		// Make sure that hijack gets closed when returning. (result
+		// in closing hijack chan and freeing server's goroutines.
+		if closer != nil {
+			defer closer.Close()
+		}
+	case err := <-errCh:
+		if err != nil {
+			utils.Debugf("Error hijack: %s", err)
+			return err
+		}
+	}
+
+	return nil
+}
 
 func (cli *DockerCli) CmdRun(args ...string) error {
 	// FIXME: just use runconfig.Parse already

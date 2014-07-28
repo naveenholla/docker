@@ -1129,8 +1129,7 @@ func (daemon *Daemon) RunInContainer(config *runconfig.RunInConfig, name string)
 		return fmt.Errorf("Container already started")
 	}
 
-	entrypoint, args := daemon.getEntrypointAndArgs(config.Entrypoint, config.Cmd)
-	// TODO(vishh): Fill up run in config.
+	entrypoint, args := daemon.getEntrypointAndArgs(nil, config.Cmd)
 
 	processConfig := &execdriver.ProcessConfig{
 		Privileged: config.Privileged,
@@ -1139,9 +1138,9 @@ func (daemon *Daemon) RunInContainer(config *runconfig.RunInConfig, name string)
 		Entrypoint: entrypoint,
 		Arguments:  args,
 	}
-	processConfig.Env = config.Env
+
 	runInConfig := &RunInConfig{
-		OpenStdin:     config.OpenStdin,
+		OpenStdin:     config.AttachStdin,
 		StdConfig:     &StdConfig{},
 		ProcessConfig: processConfig,
 	}
