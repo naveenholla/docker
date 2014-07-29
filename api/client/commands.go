@@ -2031,7 +2031,6 @@ func (cli *DockerCli) CmdRunIn(args ...string) error {
 		close(hijacked)
 	}
 
-
 	// Acknowledge the hijack before starting
 	select {
 	case closer := <-hijacked:

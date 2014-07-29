@@ -37,28 +37,26 @@ func ParseSubcommand(cmd *flag.FlagSet, args []string, sysInfo *sysinfo.SysInfo)
 
 func ParseRunIn(cmd *flag.FlagSet, args []string, sysInfo *sysinfo.SysInfo) (*RunInConfig, *flag.FlagSet, error) {
 	var (
-		flPrivileged      = cmd.Bool([]string{"#privileged", "-privileged"}, false, "Give extended privileges to this container")
-		flStdin           = cmd.Bool([]string{"i", "-interactive"}, false, "Keep STDIN open even if not attached")
-		flTty             = cmd.Bool([]string{"t", "-tty"}, false, "Allocate a pseudo-TTY")
-		flHostname        = cmd.String([]string{"h", "-hostname"}, "", "Container host name")
-		flUser            = cmd.String([]string{"u", "-user"}, "", "Username or UID")
-		flDetach          = cmd.Bool([]string{"d", "-detach"}, false, "Detached mode: run command in the background")
-		parsedArgs = cmd.Args()
+		flPrivileged = cmd.Bool([]string{"#privileged", "-privileged"}, false, "Give extended privileges to this container")
+		flStdin      = cmd.Bool([]string{"i", "-interactive"}, false, "Keep STDIN open even if not attached")
+		flTty        = cmd.Bool([]string{"t", "-tty"}, false, "Allocate a pseudo-TTY")
+		flUser       = cmd.String([]string{"u", "-user"}, "", "Username or UID")
+		flDetach     = cmd.Bool([]string{"d", "-detach"}, false, "Detached mode: run command in the background")
+		parsedArgs   = cmd.Args()
 		runInCmd     []string
-		container string
+		container    string
 	)
 	if len(parsedArgs) > 1 {
 		container = cmd.Arg(0)
 		runInCmd = parsedArgs[1:]
 	}
 
-	runInConfig := &RunInConfig {
-		User : *flUser,
-		Privileged : *flPrivileged,
-		Tty : *flTty,
-		Cmd : runInCmd,		
-		Container : container,
-		Hostname: *flHostname,
+	runInConfig := &RunInConfig{
+		User:       *flUser,
+		Privileged: *flPrivileged,
+		Tty:        *flTty,
+		Cmd:        runInCmd,
+		Container:  container,
 	}
 
 	// If neither -d or -a are set, attach to everything by default

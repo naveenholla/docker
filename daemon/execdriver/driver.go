@@ -134,7 +134,7 @@ type ProcessConfig struct {
 	Arguments    []string `json:"arguments"`
 	Terminal     Terminal `json:"-"`             // standard or tty terminal
 	ContainerPid int      `json:"container_pid"` // the pid for the process inside a container
-	Console       string        `json:"-"`              // dev/console path
+	Console      string   `json:"-"`             // dev/console path
 }
 
 // Process wrapps an os/exec.Cmd to add more metadata

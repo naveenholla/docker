@@ -367,7 +367,7 @@ func (d *driver) RunIn(c *execdriver.Command, processConfig *execdriver.ProcessC
 
 	args := append([]string{processConfig.Entrypoint}, processConfig.Arguments...)
 
-	return namespaces.RunIn(active.container, state, args, d.nsinitPath, processConfig.Stdin, processConfig.Stdout, processConfig.Stderr, processConfig.Console, 
+	return namespaces.RunIn(active.container, state, args, d.nsinitPath, processConfig.Stdin, processConfig.Stdout, processConfig.Stderr, processConfig.Console,
 		func(cmd *exec.Cmd) {
 			if startCallback != nil {
 				startCallback(processConfig)
