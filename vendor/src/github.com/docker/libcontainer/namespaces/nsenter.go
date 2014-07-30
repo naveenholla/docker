@@ -117,8 +117,8 @@ void nsenter() {
 	}
 
 	init_pid = strtol(init_pid_str, NULL, 10);
-	if (errno != 0 || init_pid <= 0) {
-		fprintf(stderr, "nsenter: Failed to parse PID from \"%s\" with error: \"%s\"\n", init_pid_str, strerror(errno));
+	if ((init_pid == 0 && errno == EINVAL) || errno == ERANGE) {
+		fprintf(stderr, "nsenter: Failed to parse PID from \"%s\" with output \"%d\" and error: \"%s\"\n", init_pid_str, init_pid, strerror(errno));
 		print_usage();
 		exit(1);
 	}

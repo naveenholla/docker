@@ -1119,7 +1119,7 @@ func (daemon *Daemon) checkLocaldns() error {
 }
 
 func (daemon *Daemon) RunInContainer(config *runconfig.RunInConfig, name string) error {
-	fmt.Printf("daemon runin container invoked for %s with options %v\n", name, *config)
+	utils.Debugf("daemon runin container invoked for %s with options %+v\n", name, *config)
 	container := daemon.Get(name)
 	if container == nil {
 		return fmt.Errorf("No such container: %s", name)
@@ -1150,6 +1150,7 @@ func (daemon *Daemon) RunInContainer(config *runconfig.RunInConfig, name string)
 	}
 
 	if err := container.RunIn(runInConfig); err != nil {
+		utils.Debugf("container Run In failed - %s\n", err)
 		return fmt.Errorf("Cannot run in container %s: %s", name, err)
 	}
 

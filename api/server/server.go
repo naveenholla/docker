@@ -1395,51 +1395,50 @@ func postContainersRunIn(eng *engine.Engine, version version.Version, w http.Res
 	if err != nil {
 		return err
 	}
-
 	if err := job.DecodeEnv(r.Body); err != nil {
 		return err
 	}
+	
+	if !job.GetenvBool("Detach") {
+		// Setting up the streaming http interface.
+		inStream, outStream, err := hijackServer(w)
+		if err != nil {
+			return err
+		}
 
-	// Setting up the streaming http interface.
-	inStream, outStream, err := hijackServer(w)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if tcpc, ok := inStream.(*net.TCPConn); ok {
-			tcpc.CloseWrite()
+		defer func() {
+			if tcpc, ok := inStream.(*net.TCPConn); ok {
+				tcpc.CloseWrite()
+			} else {
+				inStream.Close()
+			}
+		}()
+		defer func() {
+			if tcpc, ok := outStream.(*net.TCPConn); ok {
+				tcpc.CloseWrite()
+			} else if closer, ok := outStream.(io.Closer); ok {
+				closer.Close()
+			}
+		}()
+
+		var errStream io.Writer
+
+		fmt.Fprintf(outStream, "HTTP/1.1 200 OK\r\nContent-Type: application/vnd.docker.raw-stream\r\n\r\n")
+
+		if c.GetSubEnv("Config") != nil && !c.GetSubEnv("Config").GetBool("Tty") && version.GreaterThanOrEqualTo("1.6") {
+			errStream = utils.NewStdWriter(outStream, utils.Stderr)
+			outStream = utils.NewStdWriter(outStream, utils.Stdout)
 		} else {
-			inStream.Close()
+			errStream = outStream
 		}
-	}()
-	defer func() {
-		if tcpc, ok := outStream.(*net.TCPConn); ok {
-			tcpc.CloseWrite()
-		} else if closer, ok := outStream.(io.Closer); ok {
-			closer.Close()
-		}
-	}()
-
-	var errStream io.Writer
-
-	fmt.Fprintf(outStream, "HTTP/1.1 200 OK\r\nContent-Type: application/vnd.docker.raw-stream\r\n\r\n")
-
-	if c.GetSubEnv("Config") != nil && !c.GetSubEnv("Config").GetBool("Tty") && version.GreaterThanOrEqualTo("1.6") {
-		errStream = utils.NewStdWriter(outStream, utils.Stderr)
-		outStream = utils.NewStdWriter(outStream, utils.Stdout)
-	} else {
-		errStream = outStream
+		job.Setenv("stream", r.Form.Get("stream"))
+		job.Setenv("stdin", r.Form.Get("stdin"))
+		job.Setenv("stdout", r.Form.Get("stdout"))
+		job.Setenv("stderr", r.Form.Get("stderr"))
+		job.Stdin.Add(inStream)
+		job.Stdout.Add(outStream)
+		job.Stderr.Set(errStream)
 	}
-
-	job.Setenv("logs", r.Form.Get("logs"))
-	job.Setenv("stream", r.Form.Get("stream"))
-	job.Setenv("stdin", r.Form.Get("stdin"))
-	job.Setenv("stdout", r.Form.Get("stdout"))
-	job.Setenv("stderr", r.Form.Get("stderr"))
-	job.Stdin.Add(inStream)
-	job.Stdout.Add(outStream)
-	job.Stderr.Set(errStream)
-
 	// Now run the user process in container.
 	if err := job.Run(); err != nil {
 		return err

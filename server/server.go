@@ -160,6 +160,7 @@ func InitServer(job *engine.Job) engine.Status {
 		"events":           srv.Events,
 		"push":             srv.ImagePush,
 		"containers":       srv.Containers,
+		"runin":             srv.ContainerRunIn,
 	} {
 		if err := job.Eng.Register(name, srv.handlerWrap(handler)); err != nil {
 			return job.Error(err)
@@ -2150,7 +2151,8 @@ func (srv *Server) ContainerStart(job *engine.Job) engine.Status {
 }
 
 func (srv *Server) ContainerRunIn(job *engine.Job) engine.Status {
-	if len(job.Args) < 2 {
+	if len(job.Args) != 1 {
+		utils.Debugf("run in args invalid: %+v\n", job.Args)
 		return job.Errorf("Usage: %s container_id command", job.Name)
 	}
 	var (

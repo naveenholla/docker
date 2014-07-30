@@ -10,6 +10,7 @@ type RunInConfig struct {
 	AttachStdin  bool
 	AttachStderr bool
 	AttachStdout bool
+	Detach bool
 	Cmd          []string
 }
 

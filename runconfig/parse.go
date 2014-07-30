@@ -60,9 +60,10 @@ func ParseRunIn(cmd *flag.FlagSet, args []string) (*RunInConfig, error) {
 		Tty:        *flTty,
 		Cmd:        runInCmd,
 		Container:  container,
+		Detach: *flDetach,
 	}
 
-	// If neither -d or -a are set, attach to everything by default
+	// If -d is not set, attach to everything by default
 	if !*flDetach {
 		runInConfig.AttachStdout = true
 		runInConfig.AttachStderr = true

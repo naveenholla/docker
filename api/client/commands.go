@@ -1986,7 +1986,7 @@ func (cli *DockerCli) CmdRunin(args ...string) error {
 		return nil
 	}
 
-	if !(runInConfig.AttachStdin || runInConfig.AttachStdout || runInConfig.AttachStderr) {
+	if runInConfig.Detach {
 		fmt.Println("About to invoke runin")
 		_, _, err := cli.call("POST", "/containers/"+runInConfig.Container+"/runin", runInConfig, false)
 		return err
