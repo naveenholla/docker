@@ -332,7 +332,6 @@ func (daemon *Daemon) restore() error {
 			utils.Errorf("Failed to load container %v: %v", id, err)
 			continue
 		}
-
 		// Ignore the container if it does not support the current driver being used by the graph
 		if container.Driver == "" && currentDriver == "aufs" || container.Driver == currentDriver {
 			utils.Debugf("Loaded container %v", container.ID)
@@ -1021,7 +1020,7 @@ func (daemon *Daemon) Run(c *Container, pipes *execdriver.Pipes, startCallback e
 }
 
 func (daemon *Daemon) RunIn(c *Container, runInConfig *RunInConfig, pipes *execdriver.Pipes, startCallback execdriver.StartCallback) (int, error) {
-	return daemon.execDriver.RunIn(c.command, runInConfig.ProcessConfig, pipes, startCallback)
+	return daemon.execDriver.RunIn(c.command, &runInConfig.ProcessConfig, pipes, startCallback)
 }
 
 func (daemon *Daemon) Pause(c *Container) error {
@@ -1120,18 +1119,15 @@ func (daemon *Daemon) checkLocaldns() error {
 }
 
 func (daemon *Daemon) RunInContainer(config *runconfig.RunInConfig, name string) error {
+	fmt.Printf("daemon runin container invoked for %s with options %v\n", name, *config)
 	container := daemon.Get(name)
 	if container == nil {
 		return fmt.Errorf("No such container: %s", name)
 	}
 
-	if container.State.IsRunning() {
-		return fmt.Errorf("Container already started")
-	}
-
 	entrypoint, args := daemon.getEntrypointAndArgs(nil, config.Cmd)
 
-	processConfig := &execdriver.ProcessConfig{
+	processConfig := execdriver.ProcessConfig{
 		Privileged: config.Privileged,
 		User:       config.User,
 		Tty:        config.Tty,
@@ -1141,7 +1137,6 @@ func (daemon *Daemon) RunInContainer(config *runconfig.RunInConfig, name string)
 
 	runInConfig := &RunInConfig{
 		OpenStdin:     config.AttachStdin,
-		StdConfig:     &StdConfig{},
 		ProcessConfig: processConfig,
 	}
 

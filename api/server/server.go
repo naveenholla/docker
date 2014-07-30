@@ -1139,6 +1139,7 @@ func createRouter(eng *engine.Engine, logging, enableCors bool, dockerVersion st
 			"/containers/{name:.*}/resize":  postContainersResize,
 			"/containers/{name:.*}/attach":  postContainersAttach,
 			"/containers/{name:.*}/copy":    postContainersCopy,
+			"/containers/{name:.*}/runin":   postContainersRunIn,
 		},
 		"DELETE": {
 			"/containers/{name:.*}": deleteContainers,

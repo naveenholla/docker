@@ -79,6 +79,7 @@ func (cli *DockerCli) CmdHelp(args ...string) error {
 		{"rm", "Remove one or more containers"},
 		{"rmi", "Remove one or more images"},
 		{"run", "Run a command in a new container"},
+		{"runin", "Run a command in an existing container"},
 		{"save", "Save an image to a tar archive"},
 		{"search", "Search for an image on the Docker Hub"},
 		{"start", "Start a stopped container"},
@@ -1973,8 +1974,10 @@ func (cli *DockerCli) pullImage(image string) error {
 	}
 	return nil
 }
-func (cli *DockerCli) CmdRunIn(args ...string) error {
-	runInConfig, cmd, err := runconfig.ParseRunIn(cli.Subcmd("runin", "[OPTIONS] CONTAINER COMMAND [ARG...]", "Run a command in an existing container"), args, nil)
+func (cli *DockerCli) CmdRunin(args ...string) error {
+	cmd := cli.Subcmd("runin", "[OPTIONS] CONTAINER COMMAND [ARG...]", "Run a command in an existing container")
+
+	runInConfig, err := runconfig.ParseRunIn(cmd, args)
 	if err != nil {
 		return err
 	}
@@ -1983,10 +1986,19 @@ func (cli *DockerCli) CmdRunIn(args ...string) error {
 		return nil
 	}
 
-	urlValues := url.Values{}
-	// We need to instanciate the chan because the select needs it. It can
-	// be closed but can't be uninitialized.
-	hijacked := make(chan io.Closer)
+	if !(runInConfig.AttachStdin || runInConfig.AttachStdout || runInConfig.AttachStderr) {
+		fmt.Println("About to invoke runin")
+		_, _, err := cli.call("POST", "/containers/"+runInConfig.Container+"/runin", runInConfig, false)
+		return err
+	}
+	var (
+		out, stderr io.Writer
+		in          io.ReadCloser
+		urlValues   = url.Values{}
+		// We need to instanciate the chan because the select needs it. It can
+		// be closed but can't be uninitialized.
+		hijacked = make(chan io.Closer)
+	)
 	// Block the return until the chan gets closed
 	defer func() {
 		utils.Debugf("End of CmdRunIn(), Waiting for hijack to finish.")
@@ -1997,39 +2009,28 @@ func (cli *DockerCli) CmdRunIn(args ...string) error {
 
 	var errCh chan error
 
-	if runInConfig.AttachStdin || runInConfig.AttachStdout || runInConfig.AttachStderr {
-		var (
-			out, stderr io.Writer
-			in          io.ReadCloser
-		)
-		urlValues.Set("stream", "1")
+	urlValues.Set("stream", "1")
 
-		if runInConfig.AttachStdin {
-			urlValues.Set("stdin", "1")
-			in = cli.in
-		}
-		if runInConfig.AttachStdout {
-			urlValues.Set("stdout", "1")
-			out = cli.out
-		}
-		if runInConfig.AttachStderr {
-			urlValues.Set("stderr", "1")
-			if runInConfig.Tty {
-				stderr = cli.out
-			} else {
-				stderr = cli.err
-			}
-		}
-		errCh = utils.Go(func() error {
-			return cli.hijack("POST", "/containers/"+runInConfig.Container+"/runin?"+urlValues.Encode(), runInConfig.Tty, in, out, stderr, hijacked)
-		})
-	} else {
-		_, _, err := cli.call("POST", "/containers/"+runInConfig.Container+"/runin", runInConfig, false)
-		if err != nil {
-			return err
-		}
-		close(hijacked)
+	if runInConfig.AttachStdin {
+		urlValues.Set("stdin", "1")
+		in = cli.in
 	}
+	if runInConfig.AttachStdout {
+		urlValues.Set("stdout", "1")
+		out = cli.out
+	}
+	if runInConfig.AttachStderr {
+		urlValues.Set("stderr", "1")
+		if runInConfig.Tty {
+			stderr = cli.out
+		} else {
+			stderr = cli.err
+		}
+	}
+	fmt.Println("about to hijack")
+	errCh = utils.Go(func() error {
+		return cli.hijack("POST", "/containers/"+runInConfig.Container+"/runin?"+urlValues.Encode(), runInConfig.Tty, in, out, stderr, hijacked)
+	})
 
 	// Acknowledge the hijack before starting
 	select {

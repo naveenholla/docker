@@ -42,8 +42,8 @@ var (
 )
 
 type RunInConfig struct {
-	ProcessConfig *execdriver.ProcessConfig
-	StdConfig     *StdConfig
+	ProcessConfig execdriver.ProcessConfig
+	StdConfig     StdConfig
 	OpenStdin     bool
 }
 
@@ -80,7 +80,7 @@ type Container struct {
 	ExecDriver     string
 
 	command   *execdriver.Command
-	StdConfig *StdConfig
+	StdConfig StdConfig
 
 	daemon                   *Daemon
 	MountLabel, ProcessLabel string
@@ -1243,7 +1243,7 @@ func (container *Container) RunIn(runInConfig *RunInConfig) error {
 	// syncronization purposes
 	cErr := utils.Go(func() error { return container.monitorRunIn(runInConfig, callback) })
 
-	// Start should not return until the process is actually running
+	// RunIn should not return until the process is actually running
 	select {
 	case <-waitStart:
 	case err := <-cErr:
