@@ -42,6 +42,8 @@ func SysInit() {
 		root       = flag.String("root", ".", "root path for configuration files")
 		capAdd     = flag.String("cap-add", "", "capabilities to add")
 		capDrop    = flag.String("cap-drop", "", "capabilities to drop")
+		containerJson = flag.String("containerjson", "", "container config json string")
+		_ = flag.String("nspid", "" , "namespace init pid")
 	)
 	flag.Parse()
 
@@ -59,6 +61,7 @@ func SysInit() {
 		Root:       *root,
 		CapAdd:     *capAdd,
 		CapDrop:    *capDrop,
+		ContainerJson: *containerJson,
 	}
 
 	if err := executeProgram(args); err != nil {

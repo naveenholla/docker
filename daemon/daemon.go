@@ -7,7 +7,6 @@ import (
 	"log"
 	"os"
 	"path"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -864,13 +863,6 @@ func NewDaemonFromDirectory(config *daemonconfig.Config, eng *engine.Engine) (*D
 			return nil, err
 		}
 		sysInitPath = localCopy
-	}
-
-	nsinitPath := filepath.Join(filepath.Dir(sysInitPath), "nsinit")
-
-	// Create nsinit for use by the native exec driver.
-	if err := copyBinary(sysInitPath, nsinitPath); err != nil {
-		return nil, err
 	}
 
 	sysInfo := sysinfo.New(false)

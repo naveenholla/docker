@@ -62,6 +62,7 @@ type InitArgs struct {
 	Root       string
 	CapAdd     string
 	CapDrop    string
+	ContainerJson string
 }
 
 // Driver specific information based on

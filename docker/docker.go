@@ -21,7 +21,6 @@ import (
 	flag "github.com/docker/docker/pkg/mflag"
 	"github.com/docker/docker/sysinit"
 	"github.com/docker/docker/utils"
-	"github.com/docker/libcontainer/nsinit"
 )
 
 const (
@@ -39,15 +38,10 @@ func main() {
 	if len(dockerConfDir) == 0 {
 		dockerConfDir = filepath.Join(os.Getenv("HOME"), ".docker")
 	}
+
 	if selfPath := utils.SelfPath(); strings.Contains(selfPath, ".dockerinit") {
 		// Running in init mode
 		sysinit.SysInit()
-		return
-	}
-
-	if selfPath := utils.SelfPath(); strings.Contains(selfPath, nsinitBinaryName) {
-		// Running in nsinit mode
-		nsinit.NsInit()
 		return
 	}
 

@@ -89,6 +89,7 @@ void nsenter() {
 		{ "nspid",         required_argument, NULL, 'n' },
 		{ "containerjson", required_argument, NULL, 'c' },
                 { "console",       required_argument, NULL, 't' },
+                { "driver",        optional_argument, NULL, 'd' },
 		{ NULL,            0,                 NULL,  0  }
 	};
 
@@ -108,7 +109,7 @@ void nsenter() {
 		case 't':
 			console = optarg;
 			break;
-		}
+                } 
 	}
 
 	if (container_json == NULL || init_pid_str == NULL) {
