@@ -2160,16 +2160,16 @@ func (srv *Server) ContainerRunIn(job *engine.Job) engine.Status {
 		cStdout, cStderr io.Writer
 		cStdinCloser     io.Closer
 		name             = job.Args[0]
-		daemon           = srv.daemon
 	)
 
 	runInConfig := runconfig.RunInConfigFromJob(job)
 
+	utils.Debugf("Run In 1")
 	if runInConfig.AttachStdin {
 		r, w := io.Pipe()
 		go func() {
 			defer w.Close()
-			defer utils.Debugf("Closing buffered stdin pipe")
+			defer utils.Debugf("Runin: Closing buffered stdin pipe")
 			io.Copy(w, job.Stdin)
 		}()
 		cStdin = r
@@ -2182,15 +2182,16 @@ func (srv *Server) ContainerRunIn(job *engine.Job) engine.Status {
 		cStderr = job.Stderr
 	}
 
-	// TODO(vishh): Handle attaching.
 	utils.Debugf("stdin: %v, stdincloser: %v, stdout: %v, stderr: %v", cStdin, cStdinCloser, cStdout, cStderr)
-	//<-srv.daemon.Attach(container, cStdin, cStdinCloser, cStdout, cStderr)
-
-	if err := daemon.RunInContainer(runInConfig, name); err != nil {
+	if err := srv.daemon.RunInContainer(runInConfig, name, func(stdConfig *daemon.StdConfig) {
+		go func() {
+			<-srv.daemon.NewAttach(stdConfig, runInConfig.AttachStdin, false, runInConfig.Tty, cStdin, cStdinCloser, cStdout, cStderr) }()
+		utils.Debugf("Run In callback done")
+	}); err != nil {
 		return job.Error(err)
 	}
-	//srv.LogEvent("runin", name)
-
+	utils.Debugf("Run In 2")
+	srv.LogEvent("runin", name, "")
 	return engine.StatusOK
 }
 
@@ -2460,7 +2461,7 @@ func (srv *Server) ContainerAttach(job *engine.Job) engine.Status {
 			cStderr = job.Stderr
 		}
 
-		<-srv.daemon.Attach(container, cStdin, cStdinCloser, cStdout, cStderr)
+		<-srv.daemon.NewAttach(&container.StdConfig, container.Config.OpenStdin, container.Config.StdinOnce, container.Config.Tty, cStdin, cStdinCloser, cStdout, cStderr)
 
 		// If we are in stdinonce mode, wait for the process to end
 		// otherwise, simply return

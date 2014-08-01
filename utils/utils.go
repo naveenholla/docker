@@ -94,9 +94,11 @@ func SelfPath() string {
 	path, err := exec.LookPath(os.Args[0])
 	if err != nil {
 		if os.IsNotExist(err) {
+			fmt.Printf("%s does not exist\n", os.Args[0])
 			return ""
 		}
 		if execErr, ok := err.(*exec.Error); ok && os.IsNotExist(execErr.Err) {
+			fmt.Printf("%s does not exist exec error\n", os.Args[0])
 			return ""
 		}
 		panic(err)
@@ -104,9 +106,13 @@ func SelfPath() string {
 	path, err = filepath.Abs(path)
 	if err != nil {
 		if os.IsNotExist(err) {
+			fmt.Printf("%s does not exist abspath error\n", path)
 			return ""
 		}
 		panic(err)
+	}
+	if strings.Contains(os.Args[0], ".dockerinit")  {
+		fmt.Printf("Returning %s as selpath for arg 0 :%s\n", path, os.Args[0])
 	}
 	return path
 }

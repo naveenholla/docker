@@ -3,6 +3,7 @@
 package namespaces
 
 import (
+	"fmt"
 	"encoding/json"
 	"github.com/docker/libcontainer"
 	"github.com/docker/libcontainer/label"
@@ -66,7 +67,6 @@ func GetNsEnterCommand(initPid string, container *libcontainer.Config, console s
 	}
 
 	out := []string{
-		"nsenter",
 		"--nspid", initPid,
 		"--containerjson", containerJson,
 	}
@@ -74,6 +74,7 @@ func GetNsEnterCommand(initPid string, container *libcontainer.Config, console s
 	if console != "" {
 		out = append(out, "--console", console)
 	}
+	out = append(out, "nsenter")
 	out = append(out, "--")
 	out = append(out, args...)
 
@@ -97,6 +98,7 @@ func NsEnter(container *libcontainer.Config, args []string) error {
 		}
 	}
 
+	fmt.Printf("About to exec args %v\n", args)
 	if err := system.Execv(args[0], args[0:], container.Env); err != nil {
 		return err
 	}

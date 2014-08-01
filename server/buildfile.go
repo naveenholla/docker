@@ -681,7 +681,7 @@ func (b *buildFile) run(c *daemon.Container) error {
 	var errCh chan error
 	if b.verbose {
 		errCh = utils.Go(func() error {
-			return <-b.daemon.Attach(c, nil, nil, b.outStream, b.errStream)
+			return <-b.daemon.NewAttach(&c.StdConfig, c.Config.OpenStdin, c.Config.StdinOnce, c.Config.Tty, nil, nil, b.outStream, b.errStream)
 		})
 	}
 

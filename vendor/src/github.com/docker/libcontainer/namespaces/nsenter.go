@@ -75,30 +75,24 @@ void nsenter() {
 	get_args(&argc, &argv);
 
 	// Ignore if this is not for us.
-	if (argc < 2 || strcmp(argv[1], "nsenter") != 0) {
+	if (argc < 2) {
 		return;
-	}
-
-	// USAGE: <binary> nsenter <PID> <process label> <container JSON> <argv>...
-	if (argc < 6) {
-		fprintf(stderr, "nsenter: Incorrect usage, not enough arguments\n");
-		exit(1);
 	}
 
 	static const struct option longopts[] = {
 		{ "nspid",         required_argument, NULL, 'n' },
 		{ "containerjson", required_argument, NULL, 'c' },
                 { "console",       required_argument, NULL, 't' },
-                { "driver",        optional_argument, NULL, 'd' },
 		{ NULL,            0,                 NULL,  0  }
 	};
 
+opterr = 0;
 	int c;
 	pid_t init_pid = -1;
 	char *init_pid_str = NULL;
 	char *container_json = NULL;
         char *console = NULL;
-	while ((c = getopt_long_only(argc, argv, "n:s:c:", longopts, NULL)) != -1) {
+	while ((c = getopt_long_only(argc, argv, "-n:s:c:", longopts, NULL)) != -1) {
 		switch (c) {
 		case 'n':
 			init_pid_str = optarg;
@@ -112,6 +106,11 @@ void nsenter() {
                 } 
 	}
 
+        if (strcmp(argv[optind - 2], "nsenter") != 0) {
+             return;
+        }
+
+fprintf(stderr, "nsenter entering namespace");
 	if (container_json == NULL || init_pid_str == NULL) {
 		print_usage();
 		exit(1);

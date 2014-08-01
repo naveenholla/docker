@@ -18,6 +18,7 @@ import (
 	"github.com/docker/docker/daemon/execdriver"
 	"github.com/docker/docker/pkg/system"
 	"github.com/docker/docker/pkg/term"
+	"github.com/docker/docker/utils"
 	"github.com/docker/libcontainer"
 	"github.com/docker/libcontainer/apparmor"
 	"github.com/docker/libcontainer/cgroups/fs"
@@ -38,8 +39,8 @@ func init() {
 			if err := json.Unmarshal([]byte(args.ContainerJson), &container); err != nil {
 				return fmt.Errorf("failed to unmarshall -containerjson: %s - %s", args.ContainerJson, err)
 			}
-			
-			return namespaces.NsEnter(container, args.Args[1:])
+
+			return namespaces.NsEnter(container, args.Args[2:])
 		}
 
 		f, err := os.Open(filepath.Join(args.Root, "container.json"))
@@ -375,27 +376,18 @@ func (d *driver) RunIn(c *execdriver.Command, processConfig *execdriver.ProcessC
 		return -1, fmt.Errorf("failed to get nsenter command - %s", err)
 	}
 	
-	// we need to join the rootfs because namespaces will setup the rootfs and chroot
-	initPath := filepath.Join(c.Rootfs, c.InitPath)
-
-	processConfig.Args = []string{
-		initPath,
-		"--driver", DriverName,
-	} 
-	for _, val := range nsenterCmd[1:] {		
-		processConfig.Args = append(processConfig.Args, val)
-		if val == "--" {
-			processConfig.Args = append(processConfig.Args, "nsenter")
-		}
-	}
+	processConfig.Args = append([]string{
+		c.InitPath,
+		"--driver", DriverName }, nsenterCmd...) 
 
 	processConfig.Dir = "/"
 
-	/*	
+/*
 	processConfig.Stdout = os.Stdout
 	processConfig.Stderr = os.Stderr
-	processConfig.Stdin = os.Stdin */
-	
+	processConfig.Stdin = os.Stdin
+*/
+	utils.Debugf("About to run process %+v", processConfig)
 	if err := processConfig.Start(); err != nil {
 		return -1, err
 	}

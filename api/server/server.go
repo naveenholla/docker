@@ -31,6 +31,8 @@ import (
 	"github.com/docker/docker/registry"
 	"github.com/docker/docker/utils"
 	"github.com/gorilla/mux"
+
+	"github.com/docker/docker/daemon"
 )
 
 var (
@@ -1384,9 +1386,11 @@ func AcceptConnections(job *engine.Job) engine.Status {
 }
 
 func postContainersRunIn(eng *engine.Engine, version version.Version, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
+	daemon.VishLog.Println("in here")
 	if err := parseForm(r); err != nil {
 		return nil
 	}
+	daemon.VishLog.Println("form parsed")
 	var (
 		name   = vars["name"]
 		job    = eng.Job("runin", name)
@@ -1395,10 +1399,13 @@ func postContainersRunIn(eng *engine.Engine, version version.Version, w http.Res
 	if err != nil {
 		return err
 	}
+	daemon.VishLog.Printf("about to decode %+v\n", r)
 	if err := job.DecodeEnv(r.Body); err != nil {
 		return err
 	}
 	
+	daemon.VishLog.Printf("0 - job %+v\n", job)
+
 	if !job.GetenvBool("Detach") {
 		// Setting up the streaming http interface.
 		inStream, outStream, err := hijackServer(w)
@@ -1406,6 +1413,7 @@ func postContainersRunIn(eng *engine.Engine, version version.Version, w http.Res
 			return err
 		}
 
+		daemon.VishLog.Println("1")
 		defer func() {
 			if tcpc, ok := inStream.(*net.TCPConn); ok {
 				tcpc.CloseWrite()
@@ -1425,6 +1433,7 @@ func postContainersRunIn(eng *engine.Engine, version version.Version, w http.Res
 
 		fmt.Fprintf(outStream, "HTTP/1.1 200 OK\r\nContent-Type: application/vnd.docker.raw-stream\r\n\r\n")
 
+		daemon.VishLog.Println("2")
 		if c.GetSubEnv("Config") != nil && !c.GetSubEnv("Config").GetBool("Tty") && version.GreaterThanOrEqualTo("1.6") {
 			errStream = utils.NewStdWriter(outStream, utils.Stderr)
 			outStream = utils.NewStdWriter(outStream, utils.Stdout)
@@ -1438,7 +1447,9 @@ func postContainersRunIn(eng *engine.Engine, version version.Version, w http.Res
 		job.Stdin.Add(inStream)
 		job.Stdout.Add(outStream)
 		job.Stderr.Set(errStream)
+		daemon.VishLog.Println("about to invoke job.Run() with hijack")
 	}
+	daemon.VishLog.Printf("3")
 	// Now run the user process in container.
 	if err := job.Run(); err != nil {
 		return err
