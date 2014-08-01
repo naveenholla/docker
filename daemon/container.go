@@ -1266,9 +1266,9 @@ func (container *Container) monitorRunIn(runInConfig *RunInConfig, callback exec
 	}
 	utils.Debugf("Task exited with code: %v", exitCode)
 	// Re-create a brand new stdin pipe once the container exited
-	if runInConfig.OpenStdin {
+/*	if runInConfig.OpenStdin {
 		runInConfig.StdConfig.stdin, runInConfig.StdConfig.stdinPipe = io.Pipe()
 	}
-
+*/
 	return err
 }

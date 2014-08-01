@@ -3,7 +3,6 @@
 package namespaces
 
 import (
-	"fmt"
 	"encoding/json"
 	"github.com/docker/libcontainer"
 	"github.com/docker/libcontainer/label"
@@ -98,7 +97,6 @@ func NsEnter(container *libcontainer.Config, args []string) error {
 		}
 	}
 
-	fmt.Printf("About to exec args %v\n", args)
 	if err := system.Execv(args[0], args[0:], container.Env); err != nil {
 		return err
 	}

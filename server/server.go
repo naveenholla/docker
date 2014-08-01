@@ -2183,14 +2183,12 @@ func (srv *Server) ContainerRunIn(job *engine.Job) engine.Status {
 	}
 
 	utils.Debugf("stdin: %v, stdincloser: %v, stdout: %v, stderr: %v", cStdin, cStdinCloser, cStdout, cStderr)
-	if err := srv.daemon.RunInContainer(runInConfig, name, func(stdConfig *daemon.StdConfig) {
-		go func() {
-			<-srv.daemon.NewAttach(stdConfig, runInConfig.AttachStdin, false, runInConfig.Tty, cStdin, cStdinCloser, cStdout, cStderr) }()
-		utils.Debugf("Run In callback done")
+	if err := srv.daemon.RunInContainer(runInConfig, name, func(stdConfig *daemon.StdConfig) chan error {
+		return srv.daemon.NewAttach(stdConfig, runInConfig.AttachStdin, false, runInConfig.Tty, cStdin, cStdinCloser, cStdout, cStderr)
 	}); err != nil {
 		return job.Error(err)
 	}
-	utils.Debugf("Run In 2")
+	utils.Debugf("Run In done in server.go")
 	srv.LogEvent("runin", name, "")
 	return engine.StatusOK
 }

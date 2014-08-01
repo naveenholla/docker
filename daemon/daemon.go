@@ -1117,7 +1117,7 @@ func (daemon *Daemon) checkLocaldns() error {
 	return nil
 }
 
-func (daemon *Daemon) RunInContainer(config *runconfig.RunInConfig, name string, attachCallback func(*StdConfig)) error {
+func (daemon *Daemon) RunInContainer(config *runconfig.RunInConfig, name string, attachCallback func(*StdConfig) chan error) error {
 	utils.Debugf("daemon runin container invoked for %s with options %+v\n", name, *config)
 	container := daemon.Get(name)
 	if container == nil {
@@ -1147,13 +1147,17 @@ func (daemon *Daemon) RunInContainer(config *runconfig.RunInConfig, name string,
 	} else {
 		runInConfig.StdConfig.stdinPipe = utils.NopWriteCloser(ioutil.Discard) // Silently drop stdin
 	}
-	attachCallback(&runInConfig.StdConfig)
+	var errChan chan error
+	go func() {
+		errChan = attachCallback(&runInConfig.StdConfig)
+		utils.Debugf("Run In callback done")
+	}()
 	utils.Debugf("About to run container RunIn with config %+v\n", runInConfig)
 	VishLog.Printf("About to run container RunIn with config %+v\n", runInConfig)
 	if err := container.RunIn(runInConfig); err != nil {
 		utils.Debugf("container Run In failed - %s\n", err)
 		return fmt.Errorf("Cannot run in container %s: %s", name, err)
-	}
-
-	return nil
+	}	
+	utils.Debugf("daemon.go RunIn completed.")
+	return <-errChan
 }

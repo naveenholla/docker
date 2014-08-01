@@ -833,9 +833,8 @@ func postContainersAttach(eng *engine.Engine, version version.Version, w http.Re
 	}()
 
 	var errStream io.Writer
-
+	
 	fmt.Fprintf(outStream, "HTTP/1.1 200 OK\r\nContent-Type: application/vnd.docker.raw-stream\r\n\r\n")
-
 	if c.GetSubEnv("Config") != nil && !c.GetSubEnv("Config").GetBool("Tty") && version.GreaterThanOrEqualTo("1.6") {
 		errStream = utils.NewStdWriter(outStream, utils.Stderr)
 		outStream = utils.NewStdWriter(outStream, utils.Stdout)
@@ -854,7 +853,6 @@ func postContainersAttach(eng *engine.Engine, version version.Version, w http.Re
 	job.Stderr.Set(errStream)
 	if err := job.Run(); err != nil {
 		fmt.Fprintf(outStream, "Error attaching: %s\n", err)
-
 	}
 	return nil
 }
@@ -1394,17 +1392,15 @@ func postContainersRunIn(eng *engine.Engine, version version.Version, w http.Res
 	var (
 		name   = vars["name"]
 		job    = eng.Job("runin", name)
-		c, err = job.Stdout.AddEnv()
 	)
-	if err != nil {
-		return err
-	}
 	daemon.VishLog.Printf("about to decode %+v\n", r)
 	if err := job.DecodeEnv(r.Body); err != nil {
 		return err
 	}
 	
-	daemon.VishLog.Printf("0 - job %+v\n", job)
+	daemon.VishLog.Printf("0 - job %+v\n", job.Env())
+	
+	var errOut io.Writer = os.Stderr
 
 	if !job.GetenvBool("Detach") {
 		// Setting up the streaming http interface.
@@ -1412,7 +1408,7 @@ func postContainersRunIn(eng *engine.Engine, version version.Version, w http.Res
 		if err != nil {
 			return err
 		}
-
+		
 		daemon.VishLog.Println("1")
 		defer func() {
 			if tcpc, ok := inStream.(*net.TCPConn); ok {
@@ -1432,29 +1428,25 @@ func postContainersRunIn(eng *engine.Engine, version version.Version, w http.Res
 		var errStream io.Writer
 
 		fmt.Fprintf(outStream, "HTTP/1.1 200 OK\r\nContent-Type: application/vnd.docker.raw-stream\r\n\r\n")
-
-		daemon.VishLog.Println("2")
-		if c.GetSubEnv("Config") != nil && !c.GetSubEnv("Config").GetBool("Tty") && version.GreaterThanOrEqualTo("1.6") {
+		if !job.GetenvBool("Tty") && version.GreaterThanOrEqualTo("1.6") {
 			errStream = utils.NewStdWriter(outStream, utils.Stderr)
 			outStream = utils.NewStdWriter(outStream, utils.Stdout)
 		} else {
 			errStream = outStream
 		}
-		job.Setenv("stream", r.Form.Get("stream"))
-		job.Setenv("stdin", r.Form.Get("stdin"))
-		job.Setenv("stdout", r.Form.Get("stdout"))
-		job.Setenv("stderr", r.Form.Get("stderr"))
 		job.Stdin.Add(inStream)
 		job.Stdout.Add(outStream)
 		job.Stderr.Set(errStream)
-		daemon.VishLog.Println("about to invoke job.Run() with hijack")
+		errOut = outStream
 	}
 	daemon.VishLog.Printf("3")
 	// Now run the user process in container.
 	if err := job.Run(); err != nil {
+		daemon.VishLog.Printf("run in completed with error %s\n", err)
+		fmt.Fprintf(errOut, "Error running in container %s: %s\n", name, err)
 		return err
 	}
-
+	daemon.VishLog.Printf("run in completed successfully\n",)
 	w.WriteHeader(http.StatusNoContent)
 
 	return nil

@@ -110,7 +110,6 @@ opterr = 0;
              return;
         }
 
-fprintf(stderr, "nsenter entering namespace");
 	if (container_json == NULL || init_pid_str == NULL) {
 		print_usage();
 		exit(1);
