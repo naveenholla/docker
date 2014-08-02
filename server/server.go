@@ -2152,7 +2152,6 @@ func (srv *Server) ContainerStart(job *engine.Job) engine.Status {
 
 func (srv *Server) ContainerRunIn(job *engine.Job) engine.Status {
 	if len(job.Args) != 1 {
-		utils.Debugf("run in args invalid: %+v\n", job.Args)
 		return job.Errorf("Usage: %s container_id command", job.Name)
 	}
 	var (
@@ -2164,7 +2163,6 @@ func (srv *Server) ContainerRunIn(job *engine.Job) engine.Status {
 
 	runInConfig := runconfig.RunInConfigFromJob(job)
 
-	utils.Debugf("Run In 1")
 	if runInConfig.AttachStdin {
 		r, w := io.Pipe()
 		go func() {
@@ -2182,13 +2180,11 @@ func (srv *Server) ContainerRunIn(job *engine.Job) engine.Status {
 		cStderr = job.Stderr
 	}
 
-	utils.Debugf("stdin: %v, stdincloser: %v, stdout: %v, stderr: %v", cStdin, cStdinCloser, cStdout, cStderr)
-	if err := srv.daemon.RunInContainer(runInConfig, name, func(stdConfig *daemon.StdConfig) chan error {
-		return srv.daemon.NewAttach(stdConfig, runInConfig.AttachStdin, false, runInConfig.Tty, cStdin, cStdinCloser, cStdout, cStderr)
+	if err := srv.daemon.RunInContainer(runInConfig, name, func(stdConfig *daemon.StdConfig) error {
+		return <-srv.daemon.Attach(stdConfig, runInConfig.AttachStdin, false, runInConfig.Tty, cStdin, cStdinCloser, cStdout, cStderr)
 	}); err != nil {
 		return job.Error(err)
 	}
-	utils.Debugf("Run In done in server.go")
 	srv.LogEvent("runin", name, "")
 	return engine.StatusOK
 }
@@ -2459,7 +2455,7 @@ func (srv *Server) ContainerAttach(job *engine.Job) engine.Status {
 			cStderr = job.Stderr
 		}
 
-		<-srv.daemon.NewAttach(&container.StdConfig, container.Config.OpenStdin, container.Config.StdinOnce, container.Config.Tty, cStdin, cStdinCloser, cStdout, cStderr)
+		<-srv.daemon.Attach(&container.StdConfig, container.Config.OpenStdin, container.Config.StdinOnce, container.Config.Tty, cStdin, cStdinCloser, cStdout, cStderr)
 
 		// If we are in stdinonce mode, wait for the process to end
 		// otherwise, simply return

@@ -1993,7 +1993,6 @@ func (cli *DockerCli) CmdRunin(args ...string) error {
 	var (
 		out, stderr io.Writer
 		in          io.ReadCloser
-		urlValues   = url.Values{}
 		// We need to instanciate the chan because the select needs it. It can
 		// be closed but can't be uninitialized.
 		hijacked = make(chan io.Closer)
@@ -2021,10 +2020,9 @@ func (cli *DockerCli) CmdRunin(args ...string) error {
 		}
 	}
 	errCh = utils.Go(func() error {
-		return cli.hijack("POST", "/containers/"+runInConfig.Container+"/runin?"+urlValues.Encode(), runInConfig.Tty, in, out, stderr, hijacked, runInConfig)
+		return cli.hijack("POST", "/containers/"+runInConfig.Container+"/runin?", runInConfig.Tty, in, out, stderr, hijacked, runInConfig)
 	})
 
-	fmt.Fprintf(cli.out, "1\n")
 	// Acknowledge the hijack before starting
 	select {
 	case closer := <-hijacked:
@@ -2033,29 +2031,25 @@ func (cli *DockerCli) CmdRunin(args ...string) error {
 		if closer != nil {
 			defer closer.Close()
 		}
-/*	case err := <-errCh:
+	case err := <-errCh:
 		if err != nil {
 			utils.Debugf("Error hijack: %s", err)
 			return err
-		} */
+		}
 	}
-	fmt.Fprintf(cli.out, "2\n")
 	if runInConfig.Tty && cli.isTerminal {
 		if err := cli.monitorTtySize(runInConfig.Container); err != nil {
 			utils.Errorf("Error monitoring TTY size: %s\n", err)
 		}
 	}
-	fmt.Fprintf(cli.out, "3\n")
 	if errCh != nil {
 		if err := <-errCh; err != nil {
 			utils.Debugf("Error hijack: %s", err)
 			return err
 		}
 	}
-	fmt.Fprintf(cli.out, "4\n")
 	var status int
 	if !runInConfig.Tty {
-		fmt.Fprintf(cli.out, "about to wait for exit code - no tty\n")
 		// In non-tty mode, we can't dettach, so we know we need to wait.
 		if status, err = waitForExit(cli, runInConfig.Container); err != nil {
 			return err
@@ -2064,12 +2058,10 @@ func (cli *DockerCli) CmdRunin(args ...string) error {
 		// In TTY mode, there is a race. If the process dies too slowly, the state can be update after the getExitCode call
 		// and result in a wrong exit code.1
 		// No Autoremove: Simply retrieve the exit code
-		fmt.Fprintf(cli.out, "about to wait for exit code - tty\n")
 		if _, status, err = getExitCode(cli, runInConfig.Container); err != nil {
 			return err
 		}
 	}
-	fmt.Fprintf(cli.out, "6\n")
 	if status != 0 {
 		return &utils.StatusError{StatusCode: status}
 	}

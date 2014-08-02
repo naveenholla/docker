@@ -31,8 +31,6 @@ import (
 	"github.com/docker/docker/registry"
 	"github.com/docker/docker/utils"
 	"github.com/gorilla/mux"
-
-	"github.com/docker/docker/daemon"
 )
 
 var (
@@ -1384,21 +1382,16 @@ func AcceptConnections(job *engine.Job) engine.Status {
 }
 
 func postContainersRunIn(eng *engine.Engine, version version.Version, w http.ResponseWriter, r *http.Request, vars map[string]string) error {
-	daemon.VishLog.Println("in here")
 	if err := parseForm(r); err != nil {
 		return nil
 	}
-	daemon.VishLog.Println("form parsed")
 	var (
 		name   = vars["name"]
 		job    = eng.Job("runin", name)
 	)
-	daemon.VishLog.Printf("about to decode %+v\n", r)
 	if err := job.DecodeEnv(r.Body); err != nil {
 		return err
 	}
-	
-	daemon.VishLog.Printf("0 - job %+v\n", job.Env())
 	
 	var errOut io.Writer = os.Stderr
 
@@ -1409,7 +1402,6 @@ func postContainersRunIn(eng *engine.Engine, version version.Version, w http.Res
 			return err
 		}
 		
-		daemon.VishLog.Println("1")
 		defer func() {
 			if tcpc, ok := inStream.(*net.TCPConn); ok {
 				tcpc.CloseWrite()
@@ -1439,14 +1431,11 @@ func postContainersRunIn(eng *engine.Engine, version version.Version, w http.Res
 		job.Stderr.Set(errStream)
 		errOut = outStream
 	}
-	daemon.VishLog.Printf("3")
 	// Now run the user process in container.
 	if err := job.Run(); err != nil {
-		daemon.VishLog.Printf("run in completed with error %s\n", err)
 		fmt.Fprintf(errOut, "Error running in container %s: %s\n", name, err)
 		return err
 	}
-	daemon.VishLog.Printf("run in completed successfully\n",)
 	w.WriteHeader(http.StatusNoContent)
 
 	return nil

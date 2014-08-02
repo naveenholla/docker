@@ -1237,6 +1237,7 @@ func (container *Container) RunIn(runInConfig *RunInConfig) error {
 			}
 		}
 		close(waitStart)
+		utils.Debugf("Closed waitstart in container.go")
 	}
 
 	// We use a callback here instead of a goroutine and an chan for
@@ -1264,11 +1265,24 @@ func (container *Container) monitorRunIn(runInConfig *RunInConfig, callback exec
 	if err != nil {
 		utils.Errorf("Error running command in existing container %s: %s", container.ID, err)
 	}
-	utils.Debugf("Task exited with code: %v", exitCode)
-	// Re-create a brand new stdin pipe once the container exited
-/*	if runInConfig.OpenStdin {
-		runInConfig.StdConfig.stdin, runInConfig.StdConfig.stdinPipe = io.Pipe()
+
+	utils.Debugf("RunIn task in container %s exited with code %d", container.ID, exitCode)
+	if runInConfig.OpenStdin {
+		if err := runInConfig.StdConfig.stdin.Close(); err != nil {
+			utils.Errorf("Error closing stdin while running in %s: %s", container.ID, err)
+		}
 	}
-*/
+	if err := runInConfig.StdConfig.stdout.Clean(); err != nil {
+		utils.Errorf("Error closing stdout while running in %s: %s", container.ID, err)
+	}
+	if err := runInConfig.StdConfig.stderr.Clean(); err != nil {
+		utils.Errorf("Error closing stderr while running in %s: %s", container.ID, err)
+	}
+	if runInConfig.ProcessConfig.Terminal != nil {
+		if err := runInConfig.ProcessConfig.Terminal.Close(); err != nil {
+			utils.Errorf("Error closing terminal while running in container %s: %s", container.ID, err)
+		}
+	}
+
 	return err
 }

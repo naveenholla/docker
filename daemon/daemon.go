@@ -45,7 +45,6 @@ var (
 	DefaultDns                = []string{"8.8.8.8", "8.8.4.4"}
 	validContainerNameChars   = `[a-zA-Z0-9_.-]`
 	validContainerNamePattern = regexp.MustCompile(`^/?` + validContainerNameChars + `+$`)
-	VishLog *log.Logger
 )
 
 type contStore struct {
@@ -765,12 +764,6 @@ func copyBinary(src, dst string) error {
 
 // FIXME: harmonize with NewGraph()
 func NewDaemon(config *daemonconfig.Config, eng *engine.Engine) (*Daemon, error) {
-	file, err := os.OpenFile("/tmp/vish_log.txt", os.O_CREATE|os.O_WRONLY, 0666)
-	if err != nil {
-		log.Fatalln("Failed to open log file", "/tmp/vish_log.txt", ":", err)
-	}
-	VishLog = log.New(file, "vish: ", log.Lshortfile)
-	VishLog.Println("Logging starting")
 	daemon, err := NewDaemonFromDirectory(config, eng)
 	if err != nil {
 		return nil, err
@@ -1117,8 +1110,7 @@ func (daemon *Daemon) checkLocaldns() error {
 	return nil
 }
 
-func (daemon *Daemon) RunInContainer(config *runconfig.RunInConfig, name string, attachCallback func(*StdConfig) chan error) error {
-	utils.Debugf("daemon runin container invoked for %s with options %+v\n", name, *config)
+func (daemon *Daemon) RunInContainer(config *runconfig.RunInConfig, name string, attachCallback func(*StdConfig) error) error {
 	container := daemon.Get(name)
 	if container == nil {
 		return fmt.Errorf("No such container: %s", name)
@@ -1147,17 +1139,24 @@ func (daemon *Daemon) RunInContainer(config *runconfig.RunInConfig, name string,
 	} else {
 		runInConfig.StdConfig.stdinPipe = utils.NopWriteCloser(ioutil.Discard) // Silently drop stdin
 	}
-	var errChan chan error
+	var runInErr, attachErr chan error
 	go func() {
-		errChan = attachCallback(&runInConfig.StdConfig)
-		utils.Debugf("Run In callback done")
+		attachErr <- attachCallback(&runInConfig.StdConfig)
 	}()
-	utils.Debugf("About to run container RunIn with config %+v\n", runInConfig)
-	VishLog.Printf("About to run container RunIn with config %+v\n", runInConfig)
-	if err := container.RunIn(runInConfig); err != nil {
-		utils.Debugf("container Run In failed - %s\n", err)
-		return fmt.Errorf("Cannot run in container %s: %s", name, err)
-	}	
-	utils.Debugf("daemon.go RunIn completed.")
-	return <-errChan
+	
+	go func() {
+		err := container.RunIn(runInConfig)		
+		if err != nil {
+			err = fmt.Errorf("Cannot run in container %s: %s", name, err)
+		}
+		runInErr <- err		
+	}()
+	select {
+	case err := <-attachErr:
+		return fmt.Errorf("attach failed with error: %s", err)
+	case err := <-runInErr:
+		return err
+	}
+
+	return nil
 }

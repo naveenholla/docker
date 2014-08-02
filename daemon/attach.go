@@ -6,7 +6,7 @@ import (
 	"github.com/docker/docker/utils"
 )
 
-func (daemon *Daemon) NewAttach(stdConfig *StdConfig, openStdin, stdinOnce, tty bool, stdin io.ReadCloser, stdinCloser io.Closer, stdout io.Writer, stderr io.Writer) chan error {
+func (daemon *Daemon) Attach(stdConfig *StdConfig, openStdin, stdinOnce, tty bool, stdin io.ReadCloser, stdinCloser io.Closer, stdout io.Writer, stderr io.Writer) chan error {
 	var (
 		cStdout, cStderr io.ReadCloser
 		nJobs            int
