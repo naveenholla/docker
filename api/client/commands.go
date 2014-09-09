@@ -81,6 +81,7 @@ func (cli *DockerCli) CmdHelp(args ...string) error {
 		{"rm", "Remove one or more containers"},
 		{"rmi", "Remove one or more images"},
 		{"run", "Run a command in a new container"},
+		{"exec", "Run a command in an existing container"},
 		{"save", "Save an image to a tar archive"},
 		{"search", "Search for an image on the Docker Hub"},
 		{"start", "Start a stopped container"},
@@ -662,7 +663,7 @@ func (cli *DockerCli) CmdStart(args ...string) error {
 		v.Set("stderr", "1")
 
 		cErr = utils.Go(func() error {
-			return cli.hijack("POST", "/containers/"+cmd.Arg(0)+"/attach?"+v.Encode(), tty, in, cli.out, cli.err, nil)
+			return cli.hijack("POST", "/containers/"+cmd.Arg(0)+"/attach?"+v.Encode(), tty, in, cli.out, cli.err, nil, nil)
 		})
 	}
 
@@ -1864,7 +1865,7 @@ func (cli *DockerCli) CmdAttach(args ...string) error {
 		defer signal.StopCatch(sigc)
 	}
 
-	if err := cli.hijack("POST", "/containers/"+cmd.Arg(0)+"/attach?"+v.Encode(), tty, in, cli.out, cli.err, nil); err != nil {
+	if err := cli.hijack("POST", "/containers/"+cmd.Arg(0)+"/attach?"+v.Encode(), tty, in, cli.out, cli.err, nil, nil); err != nil {
 		return err
 	}
 
@@ -2146,7 +2147,7 @@ func (cli *DockerCli) CmdRun(args ...string) error {
 		}
 
 		errCh = utils.Go(func() error {
-			return cli.hijack("POST", "/containers/"+runResult.Get("Id")+"/attach?"+v.Encode(), config.Tty, in, out, stderr, hijacked)
+			return cli.hijack("POST", "/containers/"+runResult.Get("Id")+"/attach?"+v.Encode(), config.Tty, in, out, stderr, hijacked, nil)
 		})
 	} else {
 		close(hijacked)
@@ -2334,5 +2335,79 @@ func (cli *DockerCli) CmdLoad(args ...string) error {
 	if err := cli.stream("POST", "/images/load", input, cli.out, nil); err != nil {
 		return err
 	}
+	return nil
+}
+
+func (cli *DockerCli) CmdExec(args ...string) error {
+	cmd := cli.Subcmd("exec", "[OPTIONS] CONTAINER COMMAND [ARG...]", "Run a command in an existing container")
+
+	execConfig, err := runconfig.ParseExec(cmd, args)
+	if err != nil {
+		return err
+	}
+	if execConfig.Container == "" {
+		cmd.Usage()
+		return nil
+	}
+
+	if execConfig.Detach {
+		_, _, err := cli.call("POST", "/containers/"+execConfig.Container+"/exec", execConfig, false)
+		return err
+	}
+	var (
+		out, stderr io.Writer
+		in          io.ReadCloser
+		// We need to instanciate the chan because the select needs it. It can
+		// be closed but can't be uninitialized.
+		hijacked = make(chan io.Closer)
+		errCh    chan error
+	)
+	// Block the return until the chan gets closed
+	defer func() {
+		log.Debugf("End of CmdExec(), Waiting for hijack to finish.")
+		if _, ok := <-hijacked; ok {
+			log.Errorf("Hijack did not finish (chan still open)")
+		}
+	}()
+
+	if execConfig.AttachStdin {
+		in = cli.in
+	}
+	if execConfig.AttachStdout {
+		out = cli.out
+	}
+	if execConfig.AttachStderr {
+		if execConfig.Tty {
+			stderr = cli.out
+		} else {
+			stderr = cli.err
+		}
+	}
+	errCh = utils.Go(func() error {
+		return cli.hijack("POST", "/containers/"+execConfig.Container+"/exec?", execConfig.Tty, in, out, stderr, hijacked, execConfig)
+	})
+
+	// Acknowledge the hijack before starting
+	select {
+	case closer := <-hijacked:
+		// Make sure that hijack gets closed when returning. (result
+		// in closing hijack chan and freeing server's goroutines.
+		if closer != nil {
+			defer closer.Close()
+		}
+	case err := <-errCh:
+		if err != nil {
+			log.Debugf("Error hijack: %s", err)
+			return err
+		}
+	}
+	// TODO(vishh): Enable tty size monitoring once the daemon can support that.
+	if errCh != nil {
+		if err := <-errCh; err != nil {
+			log.Debugf("Error hijack: %s", err)
+			return err
+		}
+	}
+
 	return nil
 }
