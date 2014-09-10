@@ -20,6 +20,27 @@ import (
 	"github.com/docker/docker/pkg/networkfs/resolvconf"
 )
 
+func TestDockerExec(t *testing.T) {
+	runCmd := exec.Command(dockerBinary, "run", "-d", "--name", "testing", "busybox", "touch", "/tmp/file", "&&", "sleep 100")
+	out, _, _, err := runCommandWithStdoutStderr(runCmd)
+	errorOut(err, t, out)
+	
+	execCmd := exec.Command(dockerBinary, "exec", "testing", "ls", "-l", "/tmp/file")
+
+	out, _, err = runCommandWithOutput(execCmd)
+	errorOut(err, t, out)
+
+	out = strings.Trim(out, "\r\n")
+
+	if expected := ""; out != expected {
+		t.Errorf("container exec should've printed %q but printed %q", expected, out)
+	}
+
+	deleteAllContainers()
+
+	logDone("exec - basic test")
+}
+
 // "test123" should be printed by docker run
 func TestDockerRunEchoStdout(t *testing.T) {
 	runCmd := exec.Command(dockerBinary, "run", "busybox", "echo", "test123")
