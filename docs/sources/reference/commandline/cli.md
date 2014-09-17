@@ -1358,14 +1358,14 @@ It is even useful to cherry-pick particular tags of an image repository
 
     Usage: docker exec CONTAINER COMMAND [ARG...]
 
-    Run a command in an existing container
+    Run a command in an active container
 
       -d, --detach=false         Detached mode: run the process in the background and exit
       -i, --interactive=false    Keep STDIN open even if not attached
       -t, --tty=false            Allocate a pseudo-TTY
 
-The `docker exec` command runs a user specified command as a new process in an existing
-user specified container. The container needs to be active.
+The `docker exec` command runs a user specified command as a new process in an active
+user specified container.
 
 The `docker exec` command will typically be used after `docker run`.
 

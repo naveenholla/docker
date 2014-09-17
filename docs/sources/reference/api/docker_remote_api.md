@@ -34,6 +34,16 @@ You can still call an old version of the API using
 
 ### What's new
 
+`POST /containers/(id)/exec`
+
+**New!**
+Setup an exec command to be run in an active container `id`.
+
+`POST /exec/(id)/start`
+
+**New!**
+Start an exec command.
+
 ## v1.14
 
 ### Full Documentation
