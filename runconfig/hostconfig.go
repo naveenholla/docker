@@ -125,6 +125,7 @@ type HostConfig struct {
 	SecurityOpt     []string
 	ReadonlyRootfs  bool
 	Ulimits         []*ulimit.Ulimit
+	CgroupParent    string // Parent cgroup.
 }
 
 // This is used by the create command when you want to set both the
@@ -176,6 +177,7 @@ func ContainerHostConfigFromJob(job *engine.Job) *HostConfig {
 		IpcMode:         IpcMode(job.Getenv("IpcMode")),
 		PidMode:         PidMode(job.Getenv("PidMode")),
 		ReadonlyRootfs:  job.GetenvBool("ReadonlyRootfs"),
+		CgroupParent:    job.Getenv("CgroupParent"),
 	}
 
 	// FIXME: This is for backward compatibility, if people use `Cpuset`

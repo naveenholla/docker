@@ -340,6 +340,7 @@ func populateCommand(c *Container, env []string) error {
 		MountLabel:         c.GetMountLabel(),
 		LxcConfig:          lxcConfig,
 		AppArmorProfile:    c.AppArmorProfile,
+		CgroupParent:       c.hostConfig.CgroupParent,
 	}
 
 	return nil
