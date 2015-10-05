@@ -251,6 +251,7 @@ type HostConfig struct {
 	Ulimits          []*ulimit.Ulimit      // List of ulimits to be set in the container
 	LogConfig        LogConfig             // Configuration of the logs for this container
 	CgroupParent     string                // Parent cgroup.
+	OomScoreAdj      int                   // Oom score adj for the container init process.
 	ConsoleSize      [2]int                // Initial console size on Windows
 	VolumeDriver     string                // Name of the volume driver used to mount volumes
 }

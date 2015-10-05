@@ -215,6 +215,7 @@ type Command struct {
 	LxcConfig          []string          `json:"lxc_config"`
 	AppArmorProfile    string            `json:"apparmor_profile"`
 	CgroupParent       string            `json:"cgroup_parent"` // The parent cgroup for this command.
+	OomScoreAdj        int               `json:"oom_score_adj"` // oom_score_adj applied to the init process
 	FirstStart         bool              `json:"first_start"`
 	LayerPaths         []string          `json:"layer_paths"` // Windows needs to know the layer paths and folder for a command
 	LayerFolder        string            `json:"layer_folder"`

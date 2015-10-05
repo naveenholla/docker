@@ -305,6 +305,7 @@ func populateCommand(c *Container, env []string) error {
 		LxcConfig:          lxcConfig,
 		AppArmorProfile:    c.AppArmorProfile,
 		CgroupParent:       c.hostConfig.CgroupParent,
+		OomScoreAdj:        c.hostConfig.OomScoreAdj,
 	}
 
 	return nil

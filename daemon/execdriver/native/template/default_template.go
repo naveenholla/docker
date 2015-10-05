@@ -100,6 +100,7 @@ func New() *configs.Config {
 			"/proc/sys",
 			"/proc/sysrq-trigger",
 		},
+		OomScoreAdj: 0,
 	}
 
 	if apparmor.IsEnabled() {

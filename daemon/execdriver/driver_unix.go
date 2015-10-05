@@ -38,6 +38,7 @@ func InitContainer(c *Command) *configs.Config {
 	container.Rootfs = c.Rootfs
 	container.Readonlyfs = c.ReadonlyRootfs
 	container.Privatefs = true
+	container.OomScoreAdj = c.OomScoreAdj
 
 	// check to see if we are running in ramdisk to disable pivot root
 	container.NoPivotRoot = os.Getenv("DOCKER_RAMDISK") != ""
